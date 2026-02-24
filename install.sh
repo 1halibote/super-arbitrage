@@ -122,14 +122,19 @@ server {
     listen $INSTALL_PORT;
     server_name _;
 
-    # A. 静态资源通配转发 (最高优先级，解决白屏的核心)
+    # A. 兼容隐藏跳板链接访问，自动清洗为标准域
+    location ^~ $INSTALL_PATH {
+        return 301 \$scheme://\$host:\$server_port/;
+    }
+
+    # B. 静态资源直通专线
     location ~* ^/(_next|static|public|favicon\.ico) {
         proxy_pass http://$CONTAINER_NAME:3000;
         proxy_set_header Host \$host;
         proxy_cache_bypass \$http_upgrade;
     }
 
-    # B. API 与 WebSocket 全量穿透 (后端服务)
+    # C. API 与 WebSocket 底层穿透
     location ~* /(api|ws)/ {
         proxy_pass http://$CONTAINER_NAME:8000;
         proxy_http_version 1.1;
@@ -140,19 +145,13 @@ server {
         proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
     }
 
-    # C. 隐藏后缀入口与全路径支持 (解决子路径 404)
-    # ^~ 表示优先前缀匹配，且不再进行正则检查后续
-    location ^~ $INSTALL_PATH/ {
+    # D. 主路由：全量交由 Next.js 管理 (包括 2FA 拦截与 /trading 等子页面)
+    location / {
         proxy_pass http://$CONTAINER_NAME:3000;
         proxy_set_header Host \$host;
         proxy_set_header X-Real-IP \$remote_addr;
         proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto \$scheme;
-    }
-
-    # D. 兜底根路径自动跳转
-    location = / {
-        return 301 \$scheme://\$host:\$server_port$INSTALL_PATH/;
     }
 }
 EOF
