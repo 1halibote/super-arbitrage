@@ -122,13 +122,14 @@ server {
     listen $INSTALL_PORT;
     server_name _;
 
-    # A. 确保静态资源直接透传 (解决白屏)
-    location ~ ^/(_next|static|public|favicon\.ico)/ {
+    # A. 静态资源通配转发 (最高优先级，解决白屏的核心)
+    location ~* ^/(_next|static|public|favicon\.ico) {
         proxy_pass http://$CONTAINER_NAME:3000;
         proxy_set_header Host \$host;
+        proxy_cache_bypass \$http_upgrade;
     }
 
-    # B. API 与 WebSocket 转发
+    # B. API 与 WebSocket 全量穿透 (后端服务)
     location ~* /(api|ws)/ {
         proxy_pass http://$CONTAINER_NAME:8000;
         proxy_http_version 1.1;
@@ -139,14 +140,19 @@ server {
         proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
     }
 
-    # C. 核心路由：全量透传给前端 (解决子路径 404)
-    # 不再尝试在 Nginx 层重写路径，让前端框架自己处理路由
-    location / {
+    # C. 隐藏后缀入口与全路径支持 (解决子路径 404)
+    # ^~ 表示优先前缀匹配，且不再进行正则检查后续
+    location ^~ $INSTALL_PATH/ {
         proxy_pass http://$CONTAINER_NAME:3000;
         proxy_set_header Host \$host;
         proxy_set_header X-Real-IP \$remote_addr;
         proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto \$scheme;
+    }
+
+    # D. 兜底根路径自动跳转
+    location = / {
+        return 301 \$scheme://\$host:\$server_port$INSTALL_PATH/;
     }
 }
 EOF
