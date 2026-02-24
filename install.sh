@@ -122,34 +122,31 @@ server {
     listen $INSTALL_PORT;
     server_name _;
 
-    # 1. 静态资源通配转发
+    # A. 确保静态资源直接透传 (解决白屏)
     location ~ ^/(_next|static|public|favicon\.ico)/ {
         proxy_pass http://$CONTAINER_NAME:3000;
         proxy_set_header Host \$host;
-        proxy_cache_bypass \$http_upgrade;
     }
 
-    # 2. API 与 WebSocket 全量穿透 (包含可能的子路径访问)
+    # B. API 与 WebSocket 转发
     location ~* /(api|ws)/ {
         proxy_pass http://$CONTAINER_NAME:8000;
         proxy_http_version 1.1;
         proxy_set_header Upgrade \$http_upgrade;
         proxy_set_header Connection "Upgrade";
         proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
     }
 
-    # 3. 隐藏入口页与通用路由支持 (核心：解决子路径 404)
-    location $INSTALL_PATH/ {
-        proxy_pass http://$CONTAINER_NAME:3000/;
-        proxy_set_header Host \$host;
-    }
-
-    # 4. 重要：支持 Next.js 的客户端路由 (如 /trading)
-    # 当访问具体层级时，转发给前端处理
+    # C. 核心路由：全量透传给前端 (解决子路径 404)
+    # 不再尝试在 Nginx 层重写路径，让前端框架自己处理路由
     location / {
         proxy_pass http://$CONTAINER_NAME:3000;
         proxy_set_header Host \$host;
         proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
     }
 }
 EOF
