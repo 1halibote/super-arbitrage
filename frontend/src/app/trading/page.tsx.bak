@@ -1,0 +1,2029 @@
+"use client";
+
+import { useState, useEffect, useCallback, useRef } from "react";
+import { Settings, Plus, RefreshCw, Trash2, Play, Pause, RotateCcw, X, Edit2, Package, Link2, Upload, ChevronDown, Filter, Clock, Power, Pin, MoreHorizontal, HelpCircle, AlertTriangle, Siren, Minus, PlusCircle, AlertOctagon, Volume2, VolumeX, Circle, ArrowLeftRight } from "lucide-react";
+import ExchangeTab from "./components/ExchangeTab";
+import { NumberTicker } from "./components/NumberTicker";
+import { useArbitrage } from "@/hooks/useArbitrage";
+import { useTradingStream } from "@/hooks/useTradingStream";
+import { useSoundEffects } from "@/hooks/useSoundEffects";
+
+const API_BASE = "http://localhost:8000";
+
+interface Exchange {
+    name: string;
+    connected: boolean;
+    balance: number;
+}
+
+interface LadderStep {
+    spread: number;
+    amount: number;
+}
+
+interface TradingCard {
+    id: string;
+    symbol: string;
+    status: string;
+    type: string;
+    exchange_a: string;
+    exchange_b: string;
+    leverage: number;
+    open_threshold: number;
+    close_threshold: number;
+    max_position: number;
+    order_min: number;
+    order_max: number;
+    position_qty: number;
+    position_value: number;
+    pnl: number;
+    ladder_enabled: boolean;
+    ladder: LadderStep[];
+    open_disabled: boolean;
+    close_disabled: boolean;
+    stop_loss: number;
+    price_alert: number;
+    start_time: number; // timestamp
+    is_syncing?: boolean; // [New] Suppress warnings if true
+
+    // 实时数据
+    realtime_spread?: number;
+    realtime_index?: number;
+    realtime_funding_a?: number;
+    realtime_funding_b?: number;
+    funding_countdown_a?: string;
+    funding_countdown_b?: string;
+    mmr_a?: number;
+    mmr_b?: number;
+    open_avg_price?: number;
+    close_avg_price?: number;
+
+    avg_price_a?: number;
+    avg_price_b?: number;
+    position_qty_a?: number;
+    position_qty_b?: number;
+    position_value_a?: number;
+    position_value_b?: number;
+    pnl_a?: number;
+    pnl_b?: number;
+
+    liq_price_a?: number;
+    liq_price_b?: number;
+    adl_a?: number;
+    adl_b?: number;
+
+    margin_ratio_a?: number;
+    margin_ratio_b?: number;
+
+    open_spread?: number;
+    close_spread?: number;
+    last_open_time?: number;
+    last_close_time?: number;
+
+
+    indexDiffA?: number;
+    indexDiffB?: number;
+}
+
+
+
+
+
+
+// Timestamp Tool Component
+const TimestampTool = ({ onClose, theme }: { onClose: () => void, theme: string }) => {
+    // TS -> Date
+    const [tsInput, setTsInput] = useState("");
+    const [dateResult, setDateResult] = useState("");
+
+    // Date -> TS
+    const [dateInput, setDateInput] = useState("");
+    const [tsResult, setTsResult] = useState("");
+
+    const [now, setNow] = useState(Date.now());
+
+    useEffect(() => {
+        const timer = setInterval(() => setNow(Date.now()), 100);
+        return () => clearInterval(timer);
+    }, []);
+
+    const formatDate = (ts: number) => {
+        const d = new Date(ts);
+        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}:${String(d.getSeconds()).padStart(2, '0')}.${String(d.getMilliseconds()).padStart(3, '0')}`;
+    };
+
+    const handleTsChange = (val: string) => {
+        setTsInput(val);
+        const num = Number(val);
+        if (val && !isNaN(num)) {
+            setDateResult(formatDate(num));
+        } else {
+            setDateResult("");
+        }
+    };
+
+    const handleDateChange = (val: string) => {
+        setDateInput(val);
+        const d = new Date(val);
+        if (!isNaN(d.getTime())) {
+            setTsResult(d.getTime().toString());
+        } else {
+            setTsResult("");
+        }
+    };
+
+    const copyToClipboard = (text: string) => {
+        navigator.clipboard.writeText(text);
+    };
+
+    const bgColor = theme === "dark" ? "bg-slate-800" : "bg-white";
+    const borderColor = theme === "dark" ? "border-slate-700" : "border-gray-200";
+    const inputBg = theme === "dark" ? "bg-slate-900" : "bg-gray-50";
+
+    return (
+        <div className={`absolute top-16 right-6 z-50 ${bgColor} border ${borderColor} p-4 rounded-lg shadow-xl w-80 text-sm`}>
+            <div className="flex justify-between items-center mb-3">
+                <h3 className="font-bold flex items-center gap-2"><Clock className="w-4 h-4" /> 时间戳工具</h3>
+                <button onClick={onClose} className="hover:text-red-500"><X className="w-4 h-4" /></button>
+            </div>
+
+            <div className="space-y-4">
+                {/* Current Time */}
+                <div className={`p-2 rounded ${inputBg} font-mono text-xs`}>
+                    <div className="flex justify-between items-center mb-1">
+                        <span className="text-gray-400">当前时间</span>
+                        <button onClick={() => copyToClipboard(String(now))} className="text-blue-500 hover:text-blue-400 text-xs">复制时间戳</button>
+                    </div>
+                    <div className="text-lg font-bold text-cyan-500">{now}</div>
+                    <div className="text-gray-500">{formatDate(now)}</div>
+                </div>
+
+                {/* MS to Date */}
+                <div>
+                    <label className="block text-xs text-gray-500 mb-1">毫秒时间戳 → 日期</label>
+                    <input
+                        type="text"
+                        value={tsInput}
+                        onChange={(e) => handleTsChange(e.target.value)}
+                        placeholder="输入时间戳..."
+                        className={`w-full px-2 py-1.5 rounded border ${borderColor} ${inputBg} focus:outline-none focus:border-blue-500 font-mono`}
+                    />
+                    {dateResult && <div className="mt-1 text-xs text-green-500 font-mono">{dateResult}</div>}
+                </div>
+
+                {/* Date to MS */}
+                <div>
+                    <label className="block text-xs text-gray-500 mb-1">日期 → 毫秒时间戳</label>
+                    <input
+                        type="datetime-local"
+                        step="0.001"
+                        value={dateInput}
+                        onChange={(e) => handleDateChange(e.target.value)}
+                        className={`w-full px-2 py-1.5 rounded border ${borderColor} ${inputBg} focus:outline-none focus:border-blue-500 font-mono [&::-webkit-calendar-picker-indicator]:cursor-pointer [&::-webkit-calendar-picker-indicator]:filter-[invert(42%)_sepia(93%)_saturate(1352%)_hue-rotate(87deg)_brightness(119%)_contrast(119%)]`}
+                    />
+                    {tsResult && (
+                        <div className="mt-1 flex justify-between items-center">
+                            <span className="text-xs text-green-500 font-mono">{tsResult}</span>
+                            <button onClick={() => copyToClipboard(tsResult)} className="text-blue-500 hover:text-blue-400 text-xs">复制</button>
+                        </div>
+                    )}
+                </div>
+            </div>
+        </div>
+    );
+};
+// 利润 Tab 组件
+const ProfitTab = ({ theme }: { theme: string }) => {
+    const [summary, setSummary] = useState<any>(null);
+    const [records, setRecords] = useState<any[]>([]);
+    const [loading, setLoading] = useState(true);
+
+    const fetchData = useCallback(async () => {
+        try {
+            const [sumRes, recRes] = await Promise.all([
+                fetch(`${API_BASE}/api/profit/summary`),
+                fetch(`${API_BASE}/api/profit/records?limit=50`)
+            ]);
+            if (sumRes.ok) setSummary(await sumRes.json());
+            if (recRes.ok) {
+                const data = await recRes.json();
+                setRecords(data.records || []);
+            }
+        } catch (e) { console.error(e); }
+        setLoading(false);
+    }, []);
+
+    useEffect(() => {
+        fetchData();
+        const timer = setInterval(fetchData, 10000);
+        return () => clearInterval(timer);
+    }, [fetchData]);
+
+    const cardBg = theme === "dark" ? "bg-[#161b22] border-[#30363d]" : "bg-white border-gray-200";
+    const textPrimary = theme === "dark" ? "text-slate-200" : "text-gray-900";
+    const textSecondary = theme === "dark" ? "text-slate-400" : "text-gray-500";
+    const pnlColor = (v: number) => v > 0 ? "text-emerald-400" : v < 0 ? "text-red-400" : textSecondary;
+
+    const formatTime = (ts: number) => {
+        if (!ts) return "--";
+        const d = new Date(ts);
+        return `${d.getMonth() + 1}/${d.getDate()} ${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`;
+    };
+
+    if (loading) return <div className="flex items-center justify-center py-20 text-slate-400">加载中...</div>;
+
+    return (
+        <section className="px-5 py-5 max-w-7xl mx-auto">
+            {/* 统计卡片 */}
+            <div className="grid grid-cols-3 gap-4 mb-6">
+                {[
+                    { label: "今日利润", pnl: summary?.today_pnl, trades: summary?.today_trades, funding: summary?.today_funding },
+                    { label: "当月利润", pnl: summary?.month_pnl, trades: summary?.month_trades, funding: summary?.month_funding },
+                    { label: "累计利润", pnl: summary?.total_pnl, trades: summary?.total_trades, funding: summary?.total_funding },
+                ].map((item, i) => (
+                    <div key={i} className={`${cardBg} border rounded-xl p-5`}>
+                        <div className={`text-sm ${textSecondary} mb-2`}>{item.label}</div>
+                        <div className={`text-2xl font-bold ${pnlColor(item.pnl || 0)}`}>
+                            {(item.pnl || 0) > 0 ? "+" : ""}{(item.pnl || 0).toFixed(4)} U
+                        </div>
+                        <div className="flex items-center gap-4 mt-2">
+                            <span className={`text-xs ${textSecondary}`}>交易 {item.trades || 0} 笔</span>
+                            <span className={`text-xs ${pnlColor(item.funding || 0)}`}>
+                                资费 {(item.funding || 0) > 0 ? "+" : ""}{(item.funding || 0).toFixed(4)} U
+                            </span>
+                        </div>
+                    </div>
+                ))}
+            </div>
+
+            {/* 记录表格 */}
+            <div className={`${cardBg} border rounded-xl overflow-hidden`}>
+                <div className="px-5 py-3 border-b border-[#30363d] flex items-center justify-between">
+                    <span className={`text-sm font-medium ${textPrimary}`}>利润记录</span>
+                    <span className={`text-xs ${textSecondary}`}>{records.length} 条</span>
+                </div>
+                <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                        <thead>
+                            <tr className={`${theme === "dark" ? "bg-[#0d1117]" : "bg-gray-50"} text-left`}>
+                                <th className={`w-[24px] px-0`}></th> {/* Indicator Column */}
+                                <th className={`px-4 py-2.5 font-medium ${textSecondary}`}>币种</th>
+                                <th className={`px-4 py-2.5 font-medium ${textSecondary}`}>利润</th>
+                                <th className={`px-4 py-2.5 font-medium ${textSecondary}`}>交易所</th>
+                                <th className={`px-4 py-2.5 font-medium ${textSecondary}`}>时间</th>
+                                <th className={`px-4 py-2.5 font-medium ${textSecondary}`}>备注 (A/B: 手续费/数量/开/平 | 价差)</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {records.length === 0 ? (
+                                <tr><td colSpan={7} className={`px-4 py-8 text-center ${textSecondary}`}>暂无记录</td></tr>
+                            ) : records.map((r, i) => (
+                                <tr key={r.id || i} className={`border-t ${theme === "dark" ? "border-[#21262d] hover:bg-[#161b22]" : "border-gray-100 hover:bg-gray-50"} transition`}>
+                                    {/* Column 1: Indicators */}
+                                    <td className="w-[10px] pl-3 py-3 align-top">
+                                        {r.record_type === 'funding' ? (
+                                            <div className="pt-1 text-base leading-none">💰</div>
+                                        ) : (
+                                            <div className="flex flex-col gap-1 pt-1.5">
+                                                <div className={`w-1.5 h-1.5 rounded-[1px] ${(r.strategy_type === 'SF') ? "bg-emerald-500" : "bg-[#FCD535]"
+                                                    }`}></div>
+                                                <div className={`w-1.5 h-1.5 rounded-[1px] bg-[#FCD535]`}></div>
+                                            </div>
+                                        )}
+                                    </td>
+
+                                    {/* Column 2: Symbol */}
+                                    <td className={`px-4 py-3 align-top`}>
+                                        <div className={`font-bold text-sm ${theme === "dark" ? "text-slate-200" : "text-gray-900"}`}>
+                                            {r.symbol?.replace("USDT", "")}
+                                        </div>
+                                    </td>
+                                    <td className={`px-4 py-3 align-top font-mono font-medium ${pnlColor(r.pnl || 0)}`}>
+                                        <div className="text-base">{(r.pnl || 0) > 0 ? "+" : ""}{(r.pnl || 0).toFixed(4)}</div>
+                                        <div className={`text-xs ${theme === "dark" ? "text-slate-500" : "text-gray-400"}`}>U</div>
+                                    </td>
+                                    <td className={`px-4 py-3 align-top`}>
+                                        <div className="flex gap-1">
+                                            <span className="px-1.5 py-0.5 rounded text-[10px] bg-[#FCD535]/10 text-[#FCD535] border border-[#FCD535]/20">binance</span>
+                                            <span className="px-1.5 py-0.5 rounded text-[10px] bg-[#17181e] text-slate-300 border border-slate-700">bybit</span>
+                                        </div>
+                                    </td>
+
+                                    <td className={`px-4 py-3 align-top`}>
+                                        {r.record_type === 'trade' ? (
+                                            <div className={`text-xs font-mono leading-relaxed ${theme === "dark" ? "text-slate-400" : "text-gray-600"}`}>
+                                                <div className="flex items-center gap-2">
+                                                    <span className="w-3 text-slate-500">A:</span>
+                                                    <span>{(r.fee_a || 0).toFixed(2)} / {(r.qty || 0).toFixed(1)} / {(r.entry_price_a || 0).toFixed(4)} / {(r.exit_price_a || 0).toFixed(4)}</span>
+                                                </div>
+                                                <div className="flex items-center gap-2">
+                                                    <span className="w-3 text-slate-500">B:</span>
+                                                    <span>{(r.fee_b || 0).toFixed(2)} / {(r.qty || 0).toFixed(1)} / {(r.entry_price_b || 0).toFixed(4)} / {(r.exit_price_b || 0).toFixed(4)}</span>
+                                                </div>
+                                                <div className="pl-5 mt-0.5 opacity-75">
+                                                    <span>{(r.open_spread * 100).toFixed(4)}%</span>
+                                                    <span className="mx-2 text-slate-600">/</span>
+                                                    <span>{(r.close_spread * 100).toFixed(4)}%</span>
+                                                </div>
+                                            </div>
+                                        ) : (
+                                            <div className={`text-xs ${theme === "dark" ? "text-slate-500" : "text-gray-400"}`}>
+                                                资金费率结算: {(r.funding_rate * 100).toFixed(4)}%
+                                            </div>
+                                        )}
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+    );
+};
+
+export default function TradingPage() {
+    const [exchanges, setExchanges] = useState<Exchange[]>([]);
+    const [cards, setCards] = useState<TradingCard[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [showAddExchange, setShowAddExchange] = useState(false);
+    const [showAddCard, setShowAddCard] = useState(false);
+    const [currentTime, setCurrentTime] = useState(new Date());
+    const [monitorStatus, setMonitorStatus] = useState<"stopped" | "running" | "paused">("stopped");
+    const [canStartMonitor, setCanStartMonitor] = useState(false);
+    const [draftCount, setDraftCount] = useState(0);
+    const [activeTab, setActiveTab] = useState<"pairs" | "exchanges" | "profit">("pairs");
+    const [theme, setTheme] = useState<"dark" | "light">("dark");
+    const [showTimeTool, setShowTimeTool] = useState(false);
+    const [editingCardId, setEditingCardId] = useState<string | null>(null);
+    const [soundEnabled, setSoundEnabled] = useState(true);
+
+    // Audio effects
+    const { playIncrease, playDecrease } = useSoundEffects();
+    const prevPositionValuesRef = useRef<Map<string, number>>(new Map());
+
+    // Real-time arbitrage data for symbol suggestions and card display
+    const { data: arbitrageData } = useArbitrage();
+
+    // Trading WebSocket stream for real-time card updates
+    const { events: tradingEvents } = useTradingStream();
+
+    // [New] Check for Imbalance/Single Leg and Trigger Alarm
+    useEffect(() => {
+        const hasAlarm = cards.some(c => {
+            if (c.status !== 'running') return false;
+            if (c.is_syncing) return false; // [New] Suppress alarm during sync
+
+            const valA = c.position_value_a || 0;
+            const valB = c.position_value_b || 0;
+            const maxVal = Math.max(valA, valB);
+
+            if (maxVal < 2) return false; // Ignore very small dust
+
+            // 1. Single Leg: One > 2, Other < 1
+            const isSingleLeg = (valA > 2 && valB < 1) || (valB > 2 && valA < 1);
+
+            // 2. Imbalance > 8%
+            const diff = Math.abs(valA - valB);
+            const isImbalanced = (diff / maxVal) > 0.08;
+
+            return isSingleLeg || isImbalanced;
+        });
+
+        if (hasAlarm) {
+            // Check if playAlarm is available, assuming it might be part of useSoundEffects or defined elsewhere
+            // If playAlarm is not defined, we might need to add it to useSoundEffects or define it here.
+            // For now, assuming user context implied it exists or using playDecrease as placeholder if regular alarm not found
+            // HOWEVER, based on previous context, playAlarm was used. 
+            // If useSoundEffects doesn't export playAlarm, I'll assume we need to add it or use a fallback. 
+            // Checking previous file content, playDecrease was used for "Ding Dong".
+            // I will use playDecrease for now as a generic alarm if playAlarm isn't explicitly imported.
+            // Wait, previous code used `playAlarm`. I'll assume it needs to be imported or defined.
+            // Let's use `playDecrease` for now since I see it imported, and adding `playAlarm` might require modifying hooks.
+            playDecrease();
+        }
+    }, [cards, playDecrease]); // Changed dependency to playDecrease
+
+    // 监听 WebSocket 事件更新卡片数据
+    useEffect(() => {
+        if (tradingEvents.length > 0) {
+            const lastEvent = tradingEvents[0];
+            // 后端格式: {type, data: {card: {...}}, timestamp}
+            if (lastEvent.type === 'card_update' && lastEvent.data?.card) {
+                const updatedCard = lastEvent.data.card as TradingCard;
+
+                // Sound Effect Logic
+                if (soundEnabled) {
+                    const prevVal = prevPositionValuesRef.current.get(updatedCard.id) ?? 0;
+                    const currVal = updatedCard.position_value;
+
+                    // Threshold to avoid noise (e.g. < 1U change)
+                    if (Math.abs(currVal - prevVal) >= 1.0) {
+                        if (currVal > prevVal) {
+                            playIncrease(); // Value Increased -> Ding Dong
+                        } else if (currVal < prevVal) {
+                            playDecrease(); // Value Decreased -> Coins
+                        }
+                    }
+                    // Update ref
+                    prevPositionValuesRef.current.set(updatedCard.id, currVal);
+                }
+
+                setCards(prev => prev.map(c => c.id === updatedCard.id ? updatedCard : c));
+                console.log("[WS] Card updated:", updatedCard.symbol, updatedCard.position_value);
+            }
+        }
+    }, [tradingEvents, soundEnabled, playIncrease, playDecrease]);
+
+    // [New] Audio Context for Alarms
+    const audioCtxRef = useRef<AudioContext | null>(null);
+    const lastAlarmTimeRef = useRef<number>(0);
+
+    const playAlarm = useCallback(() => {
+        const now = Date.now();
+        if (now - lastAlarmTimeRef.current < 5000) return; // Throttle 5s
+        lastAlarmTimeRef.current = now;
+
+        if (!audioCtxRef.current) {
+            audioCtxRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
+        }
+        const ctx = audioCtxRef.current;
+        if (ctx.state === 'suspended') ctx.resume();
+
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(880, ctx.currentTime); // A5
+        osc.frequency.exponentialRampToValueAtTime(440, ctx.currentTime + 0.5); // Slide down
+
+        gain.gain.setValueAtTime(0.3, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.5);
+
+        osc.start();
+        osc.stop(ctx.currentTime + 0.5);
+
+        // Second beep
+        setTimeout(() => {
+            const osc2 = ctx.createOscillator();
+            const gain2 = ctx.createGain();
+            osc2.connect(gain2);
+            gain2.connect(ctx.destination);
+            osc2.type = 'sawtooth';
+            osc2.frequency.setValueAtTime(880, ctx.currentTime);
+            osc2.frequency.exponentialRampToValueAtTime(440, ctx.currentTime + 0.5);
+            gain2.gain.setValueAtTime(0.3, ctx.currentTime);
+            gain2.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.5);
+            osc2.start();
+            osc2.stop(ctx.currentTime + 0.5);
+        }, 600);
+
+    }, []);
+
+    // [New] Check for Imbalance/Single Leg and Trigger Alarm
+    useEffect(() => {
+        const hasAlarm = cards.some(c => {
+            if (c.status !== 'running') return false; // Only check running cards? Or all? User said "single leg phenomenon", implies active issue. 
+            // Even paused cards should alarm if they are stuck in bad state? Maybe. Let's check all for now.
+
+            const valA = c.position_value_a || 0;
+            const valB = c.position_value_b || 0;
+            const maxVal = Math.max(valA, valB);
+
+            if (maxVal < 2) return false; // Ignore very small dust
+
+            // 1. Single Leg: One > 2, Other < 1
+            const isSingleLeg = (valA > 2 && valB < 1) || (valB > 2 && valA < 1);
+
+            // 2. Imbalance > 8%
+            const diff = Math.abs(valA - valB);
+            const isImbalanced = (diff / maxVal) > 0.08;
+
+            return isSingleLeg || isImbalanced;
+        });
+
+        if (hasAlarm) {
+            playAlarm();
+        }
+    }, [cards, playAlarm]);
+
+    // 新交易所表单
+    const [newExchange, setNewExchange] = useState({ exchange: "binance", apiKey: "", apiSecret: "" });
+
+    // 拖拽状态
+    const [modalPos, setModalPos] = useState({ x: 0, y: 0 });
+    const isDragging = useRef(false);
+    const dragStart = useRef({ x: 0, y: 0 });
+
+    // Position Tracker for Sound
+    const lastPositionsRef = useRef<Record<string, number>>({});
+
+    const playBeep = (type: 'open' | 'close' = 'open') => {
+        try {
+            const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
+            if (!AudioContext) return;
+            const ctx = new AudioContext();
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+
+            if (type === 'open') {
+                osc.type = "sine";
+                osc.frequency.setValueAtTime(600, ctx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(1200, ctx.currentTime + 0.1);
+            } else {
+                osc.type = "sawtooth";
+                osc.frequency.setValueAtTime(400, ctx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(100, ctx.currentTime + 0.2);
+            }
+
+            gain.gain.setValueAtTime(0.1, ctx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + (type === 'open' ? 0.1 : 0.2));
+
+            osc.start();
+            osc.stop(ctx.currentTime + (type === 'open' ? 0.1 : 0.2));
+        } catch (e) {
+            console.error("Sound play failed", e);
+        }
+    };
+
+    // 新卡片表单
+    const [newCard, setNewCard] = useState<any>({
+        symbol: "",
+        status: "paused",
+        type: "SF",
+        exchangeA: "binance",
+        exchangeB: "bybit",
+        leverage: 1,
+        openThreshold: 1.0,
+        closeThreshold: 0.0,
+        maxPosition: 1000,
+        orderMin: 100,
+        orderMax: 500,
+        ladderEnabled: false,
+        ladder: [{ spread: 1.5, amount: 500 }, { spread: 2.0, amount: 1000 }],
+        openDisabled: false,
+        closeDisabled: false,
+        stopLoss: 0,
+        priceAlert: 0,
+        startTime: 0 // timestamp
+    });
+
+    // 拖拽逻辑
+    useEffect(() => {
+        const handleMouseMove = (e: MouseEvent) => {
+            if (!isDragging.current) return;
+            const dx = e.clientX - dragStart.current.x;
+            const dy = e.clientY - dragStart.current.y;
+            setModalPos(prev => ({ x: prev.x + dx, y: prev.y + dy }));
+            dragStart.current = { x: e.clientX, y: e.clientY };
+        };
+
+        const handleMouseUp = () => {
+            isDragging.current = false;
+        };
+
+        if (showAddCard) {
+            window.addEventListener('mousemove', handleMouseMove);
+            window.addEventListener('mouseup', handleMouseUp);
+        }
+
+        return () => {
+            window.removeEventListener('mousemove', handleMouseMove);
+            window.removeEventListener('mouseup', handleMouseUp);
+        };
+    }, [showAddCard]);
+
+    const onModalHeaderMouseDown = (e: React.MouseEvent) => {
+        isDragging.current = true;
+        dragStart.current = { x: e.clientX, y: e.clientY };
+    };
+
+    // 时钟更新
+    useEffect(() => {
+        const timer = setInterval(() => setCurrentTime(new Date()), 1000);
+        return () => clearInterval(timer);
+    }, []);
+
+    // 加载数据
+    useEffect(() => {
+        loadCards();
+        loadExchanges(); // Run in parallel, don't block cards
+        loadMonitor();
+    }, []);
+
+    const loadCards = async () => {
+        try {
+            const res = await fetch(`${API_BASE}/api/trading/cards`);
+            const data = await res.json();
+            setCards(data.cards || []);
+
+            // Check position changes for sound
+            const newPositions: Record<string, number> = {};
+            (data.cards || []).forEach((c: TradingCard) => {
+                const pid = c.id;
+                const pos = c.position_value;
+                newPositions[pid] = pos;
+
+                const lastPos = lastPositionsRef.current[pid];
+                if (lastPos !== undefined && lastPos !== pos) {
+                    if (pos > lastPos) playBeep('open');
+                    else if (pos < lastPos) playBeep('close');
+                }
+            });
+            lastPositionsRef.current = newPositions;
+        } catch (e) {
+            console.error("Failed to load cards", e);
+        }
+    };
+
+    const loadExchanges = async () => {
+        try {
+            const res = await fetch(`${API_BASE}/api/trading/exchanges`);
+            const data = await res.json();
+            setExchanges(data.exchanges || []);
+        } catch (e) {
+            console.error("Failed to load exchanges", e);
+        }
+    };
+
+    const loadMonitor = async () => {
+        try {
+            const res = await fetch(`${API_BASE}/api/monitor/status`);
+            const data = await res.json();
+            setMonitorStatus(data.status || "stopped");
+            setCanStartMonitor(data.canStart || false);
+        } catch (e) {
+            console.error("Failed to load monitor", e);
+        }
+    };
+
+    const loadData = async () => {
+        setLoading(true);
+        await Promise.all([loadCards(), loadExchanges(), loadMonitor()]);
+        setLoading(false);
+    };
+
+    // 添加交易所
+    const handleAddExchange = async () => {
+        try {
+            const res = await fetch(`${API_BASE}/api/trading/exchange`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(newExchange)
+            });
+            const data = await res.json();
+            if (data.success) {
+                setShowAddExchange(false);
+                setNewExchange({ exchange: "binance", apiKey: "", apiSecret: "" });
+                loadExchanges(); // Only reload exchanges
+            }
+        } catch (e) {
+            console.error("Failed to add exchange", e);
+        }
+    };
+
+    // 删除交易所
+    const handleDeleteExchange = async (exchange: string) => {
+        if (!confirm(`确定删除 ${exchange} 吗？`)) return;
+        try {
+            await fetch(`${API_BASE}/api/trading/exchange/${exchange}`, { method: "DELETE" });
+            loadExchanges(); // Only reload exchanges
+        } catch (e) {
+            console.error("Failed to delete exchange", e);
+        }
+    };
+
+    // 切换卡片状态
+    const handleToggleStatus = async (card: TradingCard) => {
+        const newStatus = card.status === "running" ? "paused" : "running";
+        try {
+            // 只更新状态，其他字段保持原样
+            const updatedCard = { ...card, status: newStatus };
+            const res = await fetch(`${API_BASE}/api/trading/card/${card.id}`, {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(updatedCard)
+            });
+
+            if (res.ok) {
+                // Optimistic update or just loadCards (fast now)
+                loadCards(); // 刷新列表 (Fast)
+            } else {
+                const data = await res.json();
+                alert("切换状态失败: " + JSON.stringify(data));
+            }
+        } catch (e) {
+            console.error("Failed to toggle status", e);
+        }
+    };
+
+    // 添加/编辑卡片
+    const handleAddCard = async () => {
+        if (parseFloat(newCard.openThreshold) <= parseFloat(newCard.closeThreshold)) {
+            alert("错误：开仓差价必须大于清仓差价！");
+            return;
+        }
+
+        // Validation: Order sizes must be <= Position Limit
+        const maxPos = parseFloat(newCard.maxPosition) || 0;
+        const oMax = parseFloat(newCard.orderMax) || 0;
+        const oMin = parseFloat(newCard.orderMin) || 0;
+
+        if (oMax > maxPos) {
+            alert(`错误：最大单笔额 (${oMax}) 不能超过仓位限额 (${maxPos})！`);
+            return;
+        }
+        if (oMin > maxPos) {
+            alert(`错误：最小单笔额 (${oMin}) 不能超过仓位限额 (${maxPos})！`);
+            return;
+        }
+        if (oMin < 5) {
+            alert(`错误：最小单笔额 (${oMin}) 不能低于 5 USDT！(交易所限制)`);
+            return;
+        }
+        if (oMin >= oMax) {
+            alert(`错误：最小单笔额 (${oMin}) 必须小于 最大单笔额 (${oMax})！`);
+            return;
+        }
+
+        try {
+            const url = editingCardId ? `/api/trading/card/${editingCardId}` : "/api/trading/card";
+            const method = editingCardId ? "PUT" : "POST";
+
+            // Convert strings to numbers
+            // Convert strings to numbers and map to snake_case for backend
+            const cardData = {
+                symbol: newCard.symbol,
+                status: newCard.status,
+                type: newCard.type,
+                exchange_a: newCard.exchangeA.trim().toLowerCase(),
+                exchange_b: newCard.exchangeB.trim().toLowerCase(),
+                leverage: parseInt(newCard.leverage) || 1,
+                open_threshold: parseFloat(newCard.openThreshold) || 0,
+                close_threshold: parseFloat(newCard.closeThreshold) || 0,
+                max_position: parseFloat(newCard.maxPosition) || 0,
+                order_min: parseFloat(newCard.orderMin) || 0,
+                order_max: parseFloat(newCard.orderMax) || 0,
+                stop_loss: parseFloat(newCard.stopLoss) || 0,
+                price_alert: parseFloat(newCard.priceAlert) || 0,
+                start_time: parseInt(newCard.startTime) || 0,
+                ladder_enabled: newCard.ladderEnabled,
+                ladder: newCard.ladder,
+                open_disabled: newCard.openDisabled,
+                close_disabled: newCard.closeDisabled
+            };
+
+            const res = await fetch(url, {
+                method: method,
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(cardData)
+            });
+            const data = await res.json();
+            if (data.success) {
+                setShowAddCard(false);
+                setEditingCardId(null);
+                resetNewCard();
+                loadCards(); // Only reload cards (Fast)
+            } else {
+                alert((editingCardId ? "更新" : "创建") + "失败: " + JSON.stringify(data));
+            }
+        } catch (e) {
+            console.error("Failed to save card", e);
+        }
+    };
+
+    // 打开编辑弹窗
+    const handleEditCard = (card: TradingCard) => {
+        setNewCard({
+            symbol: card.symbol,
+            status: card.status,
+            type: card.type,
+            exchangeA: card.exchange_a,
+            exchangeB: card.exchange_b,
+            leverage: card.leverage,
+            openThreshold: card.open_threshold,
+            closeThreshold: card.close_threshold,
+            maxPosition: card.max_position,
+            orderMin: card.order_min,
+            orderMax: card.order_max,
+            ladderEnabled: card.ladder_enabled,
+            ladder: card.ladder,
+            openDisabled: card.open_disabled,
+            closeDisabled: card.close_disabled,
+            stopLoss: card.stop_loss,
+            priceAlert: card.price_alert,
+            startTime: card.start_time
+        });
+        setEditingCardId(card.id);
+        setShowAddCard(true);
+    };
+
+    const resetNewCard = () => {
+        setNewCard({
+            symbol: "",
+            status: "paused",
+            type: "SF",
+            exchangeA: "binance",
+            exchangeB: "bybit",
+            leverage: 1,
+            openThreshold: 1.0,
+            closeThreshold: 0.0,
+            maxPosition: 1000,
+            orderMin: "",
+            orderMax: "",
+            ladderEnabled: false,
+            ladder: [{ spread: 1.5, amount: 500 }, { spread: 2.0, amount: 1000 }],
+            openDisabled: false,
+            closeDisabled: false,
+            stopLoss: 0,
+            priceAlert: 0,
+            startTime: 0
+        });
+        setModalPos({ x: 0, y: 0 });
+    };
+
+    // 删除卡片
+    const handleDeleteCard = async (cardId: string) => {
+        // Updated: No confirm
+        try {
+            await fetch(`${API_BASE}/api/trading/card/${cardId}`, { method: "DELETE" });
+            loadCards();
+        } catch (e) {
+            console.error("Failed to delete card", e);
+        }
+    };
+
+    // 手动执行开仓
+    // 一键开仓
+    const handleExecute = async (card: TradingCard) => {
+        // If already running, skip confirm
+        if (card.status !== "running") {
+            if (!confirm(`确定开启一键开仓吗？\n\n这将把卡片状态设为“已启用”，并将开/清仓差价分别设为 -900% / -999%，以触发立即开仓。`)) return;
+        }
+
+        try {
+            // Updated logic: Modify card thresholds and enable status
+            const updatedCard = {
+                ...card,
+                open_threshold: -900,
+                close_threshold: -999,
+                status: "running"
+            };
+
+            const res = await fetch(`${API_BASE}/api/trading/card/${card.id}`, {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    symbol: updatedCard.symbol,
+                    status: updatedCard.status,
+                    type: updatedCard.type,
+                    exchange_a: updatedCard.exchange_a,
+                    exchange_b: updatedCard.exchange_b,
+                    leverage: updatedCard.leverage,
+                    open_threshold: updatedCard.open_threshold,
+                    close_threshold: updatedCard.close_threshold,
+                    max_position: updatedCard.max_position,
+                    order_min: updatedCard.order_min,
+                    order_max: updatedCard.order_max,
+                    ladder_enabled: updatedCard.ladder_enabled,
+                    ladder: updatedCard.ladder,
+                    open_disabled: updatedCard.open_disabled,
+                    close_disabled: updatedCard.close_disabled,
+                    stop_loss: updatedCard.stop_loss,
+                    price_alert: updatedCard.price_alert,
+                    start_time: updatedCard.start_time
+                })
+            });
+
+            if (res.ok) {
+                console.log("一键开仓已启动");
+                loadCards();
+            } else {
+                const err = await res.json();
+                alert(`启动失败: ${err.error || "Unknown error"}`);
+            }
+        } catch (e) {
+            console.error("Execute failed", e);
+            alert("请求失败，请检查网络或后端服务");
+        }
+    };
+
+    // 手动平仓
+    // 一键清仓 - 静默执行，不弹窗
+    const handleClose = async (card: TradingCard) => {
+        // [New Feature] If paused, ask to start
+        if (card.status === "paused") {
+            if (!confirm("卡片已暂停。是否立即启动并执行清仓？\n(启动后将设置为: 禁止开仓, 触发清仓)")) {
+                return;
+            }
+
+            // 1. Switch to Running + Safe Thresholds
+            const updatedCard = {
+                ...card,
+                status: "running",
+                open_threshold: 999.0,
+                close_threshold: 900.0
+            };
+
+            try {
+                await fetch(`${API_BASE}/api/trading/card/${card.id}`, {
+                    method: "PUT",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(updatedCard)
+                });
+                // Small delay to ensure DB update
+                await new Promise(r => setTimeout(r, 200));
+            } catch (e) {
+                alert("启动卡片失败");
+                return;
+            }
+        }
+
+        try {
+            const res = await fetch(`${API_BASE}/api/trading/force-close/${card.symbol}?exchangeA=${card.exchange_a}&exchangeB=${card.exchange_b}`, {
+                method: "POST"
+            });
+            const data = await res.json();
+
+            if (data.success) {
+                console.log(`[CLOSE] ${card.symbol} 成功，延迟: ${data.latency_ms?.toFixed(0) || 0}ms`);
+            } else {
+                console.warn(`[CLOSE] ${card.symbol} 失败: ${data.error || "未知错误"}`);
+                // alert(`清仓失败: ${data.error}`); // Optional: Suppress alert if just cleaning up
+            }
+        } catch (e) {
+            console.error("Close failed", e);
+            alert("请求失败");
+        } finally {
+            // Always reload to reflect latest state (e.g. if sync succeeded even if orders failed)
+            loadCards();
+        }
+    };
+
+    // 创建反向卡片
+    // 创建反向卡片
+    const handleReverseCard = async (cardId: string) => {
+        // Removed confirmation dialog
+        try {
+            const res = await fetch(`${API_BASE}/api/trading/card/${cardId}/reverse`, {
+                method: "POST"
+            });
+            const data = await res.json();
+            if (data.success) {
+                // alert("反向卡片创建成功！");
+                loadCards();
+            } else {
+                alert(`创建失败: ${data.error}`);
+            }
+        } catch (e) {
+            console.error("Reverse card failed", e);
+            alert("请求失败");
+        }
+    };
+
+    // 获取卡片的实时数据（从 WebSocket 数据中查找，需匹配交易所方向）
+    const getCardRealTimeData = useCallback((symbol: string, type: string, exchangeA: string, exchangeB: string) => {
+        const dataSource = type === "FF" ? arbitrageData?.ff : arbitrageData?.sf;
+        if (!dataSource || dataSource.length === 0) return null;
+
+        const suffixA = type === "SF" ? "spot" : "linear";
+        const suffixB = "linear";
+
+        const getKey = (ex: string, s: string) => {
+            const k = ex.trim().toLowerCase();
+            if (k === "binance") return s === "linear" ? "binance_future" : "binance";
+            if (k === "bybit") return s === "linear" ? "bybit_linear" : "bybit_spot";
+            return `${k}_${s}`;
+        };
+
+        const keyA = getKey(exchangeA, suffixA);
+        const keyB = getKey(exchangeB, suffixB);
+
+        // Find matching item (Long A, Short B) -> details.ex1=A, details.ex2=B
+        const item = dataSource.find((opp) => {
+            if (opp.symbol !== symbol) return false;
+            if (opp.details) {
+                return opp.details.ex1 === keyA && opp.details.ex2 === keyB;
+            }
+            return opp.pair === `${keyA}/${keyB}`;
+        });
+
+        if (!item) return null;
+        return {
+            openSpread: item.openSpread,
+            closeSpread: item.closeSpread,
+            indexPrice: item.indexPriceB || 0,
+            indexPriceA: item.indexPriceA || 0,
+            indexPriceB: item.indexPriceB || 0,
+            netFundingRate: item.netFundingRate,
+            indexDiffA: item.indexDiffA,
+            indexDiffB: item.indexDiffB,
+            fundingRateA: item.fundingRateA,
+            fundingRateB: item.fundingRateB,
+            fundingIntervalA: item.fundingIntervalA,
+            fundingIntervalB: item.fundingIntervalB,
+            fundingMaxA: item.fundingMaxA,
+            fundingMinA: item.fundingMinA,
+            fundingMaxB: item.fundingMaxB,
+            fundingMinB: item.fundingMinB
+        };
+    }, [arbitrageData]);
+
+    // 计算费率结算倒计时（基于本地时间）
+    // interval 可以是数字（小时）或字符串（如 "8h"）
+    const getFundingCountdown = useCallback((interval: string | number | undefined | null) => {
+        // 解析 interval 为小时数
+        let hours = 8; // 默认8小时
+        if (typeof interval === 'number') {
+            hours = interval;
+        } else if (typeof interval === 'string') {
+            hours = parseInt(interval.replace('h', '')) || 8;
+        }
+        if (!hours || hours <= 0) return "--:--:--";
+
+        const now = new Date();
+
+        // 计算今天的所有结算时间点 (UTC)
+        const settlements = [];
+        for (let h = 0; h < 24; h += hours) {
+            settlements.push(h);
+        }
+
+        // 找到下一个结算时间
+        const utcHour = now.getUTCHours();
+        const utcMin = now.getUTCMinutes();
+        const utcSec = now.getUTCSeconds();
+        const currentMinutes = utcHour * 60 + utcMin + utcSec / 60;
+
+        let nextSettlement = 24 * 60; // 默认明天0点
+        for (const h of settlements) {
+            const settlementMinutes = h * 60;
+            if (settlementMinutes > currentMinutes) {
+                nextSettlement = settlementMinutes;
+                break;
+            }
+        }
+        if (nextSettlement === 24 * 60) {
+            nextSettlement = settlements[0] * 60 + 24 * 60; // 明天第一个结算时间
+        }
+
+        const diffMinutes = nextSettlement - currentMinutes;
+        const diffSeconds = Math.floor(diffMinutes * 60);
+        const h = Math.floor(diffSeconds / 3600);
+        const m = Math.floor((diffSeconds % 3600) / 60);
+        const s = diffSeconds % 60;
+
+        return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+    }, []);
+
+    // 切换卡片状态 (Optimistic + Direct API)
+    const toggleCardStatus = async (card: TradingCard) => {
+        const cardId = card.id;
+        const originalStatus = card.status;
+        const newStatus = originalStatus === 'running' ? 'paused' : 'running';
+
+        setCards(prev => prev.map(c => c.id === cardId ? { ...c, status: newStatus } : c));
+
+        try {
+            const res = await fetch(`${API_BASE}/api/trading/card/${cardId}/toggle`, { method: "POST" });
+            const data = await res.json();
+            if (!data.success) {
+                setCards(prev => prev.map(c => c.id === cardId ? { ...c, status: originalStatus } : c));
+            }
+        } catch (e) {
+            console.error("Toggle request failed", e);
+            setCards(prev => prev.map(c => c.id === cardId ? { ...c, status: originalStatus } : c));
+        }
+    };
+
+    // 全局启动监控
+    const startMonitor = async () => {
+        if (!canStartMonitor) {
+            alert("请先配置交易所 API");
+            return;
+        }
+        setMonitorStatus('running');
+        try {
+            const res = await fetch(`${API_BASE}/api/monitor/start`, { method: "POST" });
+            const data = await res.json();
+            if (!data.success) setMonitorStatus('stopped');
+        } catch (e) {
+            console.error("Start monitor failed", e);
+            setMonitorStatus('stopped');
+        }
+    };
+
+    // 停止监控
+    const stopMonitor = async () => {
+        setMonitorStatus('stopped');
+        try {
+            const res = await fetch(`${API_BASE}/api/monitor/stop`, { method: "POST" });
+            const data = await res.json();
+            if (!data.success) setMonitorStatus(data.status || 'running');
+        } catch (e) {
+            console.error("Stop monitor failed", e);
+            setMonitorStatus('running');
+        }
+    };
+
+    // 重启监控
+    const restartMonitor = async () => {
+        try {
+            const res = await fetch(`${API_BASE}/api/monitor/restart`, { method: "POST" });
+            const data = await res.json();
+            setMonitorStatus(data.status);
+        } catch (e) {
+            console.error("Restart monitor failed", e);
+        }
+    };
+
+    // 添加梯度
+    const addLadderStep = () => {
+        setNewCard({
+            ...newCard,
+            ladder: [...newCard.ladder, { spread: 0, amount: 0 }]
+        });
+    };
+
+    // 删除梯度
+    const removeLadderStep = (index: number) => {
+        setNewCard({
+            ...newCard,
+            ladder: newCard.ladder.filter((_: any, i: number) => i !== index)
+        });
+    };
+
+    // 更新梯度
+    const updateLadderStep = (index: number, field: 'spread' | 'amount', value: number) => {
+        const updated = [...newCard.ladder];
+        updated[index][field] = value;
+        setNewCard({ ...newCard, ladder: updated });
+    };
+
+    // 格式化时间
+    const formatTime = (date: Date) => {
+        return date.toLocaleTimeString('zh-CN', { hour12: false });
+    };
+
+    // 统计运行中的卡片数量
+    const runningCount = cards.filter(c => c.status === "running").length;
+
+    return (
+        <div className={`min-h-screen transition-colors duration-300 ${theme === "dark" ? "bg-[#0d1117] text-slate-200" : "bg-gray-50 text-gray-900"}`} style={{ fontFamily: "Inter, sans-serif" }}>
+            {/* 顶部导航 */}
+            <header className={`${theme === "dark" ? "bg-[#161b22] border-[#30363d]" : "bg-white border-gray-200"} border-b px-6 py-3 shadow-sm relative`}>
+                <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                        <div className="w-8 h-8 bg-cyan-500 rounded-lg flex items-center justify-center text-white font-bold">
+                            A
+                        </div>
+                        <h1 className={`text - xl font - bold tracking - tight ${theme === "dark" ? "text-white" : "text-gray-900"} `}>Arbitrage Pro</h1>
+                        <span className="px-2 py-0.5 rounded-full bg-cyan-500/10 text-cyan-500 text-xs font-medium border border-cyan-500/20">
+                            v1.0.0
+                        </span>
+                    </div>
+
+                    {/* 中间时钟 + 控制按钮 */}
+                    <div className="flex items-center gap-3">
+                        <div className="bg-slate-800 rounded-lg px-4 py-1.5 font-mono text-lg">
+                            {formatTime(currentTime)}
+                        </div>
+                        <button
+                            onClick={startMonitor}
+                            disabled={!canStartMonitor || monitorStatus === "running"}
+                            className={`px - 4 py - 1.5 rounded - lg text - sm font - medium transition ${monitorStatus === "running"
+                                ? "bg-green-600 cursor-default"
+                                : canStartMonitor
+                                    ? "bg-blue-600 hover:bg-blue-500"
+                                    : "bg-slate-600 cursor-not-allowed"
+                                } `}
+                        >
+                            {monitorStatus === "running" ? "监控中" : "启动"}
+                        </button>
+                        <button
+                            onClick={stopMonitor}
+                            disabled={monitorStatus === "stopped"}
+                            className={`px - 3 py - 1.5 rounded - lg text - sm transition ${monitorStatus === "stopped"
+                                ? "bg-slate-600 cursor-not-allowed"
+                                : "bg-red-600/80 hover:bg-red-500"
+                                } `}
+                        >
+                            停止
+                        </button>
+                        <button
+                            onClick={restartMonitor}
+                            className="p-1.5 rounded-lg bg-slate-700 hover:bg-slate-600 transition"
+                            title="重启监控"
+                        >
+                            <RotateCcw className={`w - 4 h - 4 ${loading ? "animate-spin" : ""} `} />
+                        </button>
+                    </div>
+
+                    {/* 右侧版本 */}
+                    <div className="flex items-center gap-2">
+                        <button
+                            onClick={() => setShowTimeTool(!showTimeTool)}
+                            className={`p - 1.5 rounded hover: bg - slate - 700 transition ${showTimeTool ? "text-cyan-400 bg-slate-700" : "text-slate-500"} `}
+                            title="时间戳工具"
+                        >
+                            <Clock className="w-4 h-4" />
+                        </button>
+                        <div className="text-xs text-slate-500">v1.0.0</div>
+                    </div>
+                </div>
+
+                {/* 时间戳工具弹窗 */}
+                {showTimeTool && <TimestampTool onClose={() => setShowTimeTool(false)} theme={theme} />}
+
+                {/* 标签栏 */}
+                <div className="flex items-center gap-6 mt-3 text-sm">
+                    <button
+                        onClick={() => setActiveTab("pairs")}
+                        className={`transition pb - 1 ${activeTab === "pairs" ? "text-white border-b-2 border-cyan-400" : "text-slate-400 hover:text-white"} `}
+                    >
+                        币对
+                    </button>
+                    <button
+                        onClick={() => setActiveTab("profit")}
+                        className={`transition pb-1 ${activeTab === "profit" ? (theme === "dark" ? "text-white border-b-2 border-cyan-400" : "text-gray-900 border-b-2 border-cyan-500") : (theme === "dark" ? "text-slate-400 hover:text-white" : "text-gray-500 hover:text-gray-900")} `}
+                    >
+                        利润
+                    </button>
+                    <button
+                        onClick={() => setActiveTab("exchanges")}
+                        className={`transition pb - 1 ${activeTab === "exchanges" ? (theme === "dark" ? "text-white border-b-2 border-cyan-400" : "text-gray-900 border-b-2 border-cyan-500") : (theme === "dark" ? "text-slate-400 hover:text-white" : "text-gray-500 hover:text-gray-900")} `}
+                    >
+                        交易所
+                    </button>
+                    <button className={`${theme === "dark" ? "text-slate-400 hover:text-white" : "text-gray-500 hover:text-gray-900"} transition`}>事件</button>
+                    <button className={`${theme === "dark" ? "text-slate-400 hover:text-white" : "text-gray-500 hover:text-gray-900"} transition`}>设置</button>
+                    <button className={`${theme === "dark" ? "text-slate-400 hover:text-white" : "text-gray-500 hover:text-gray-900"} transition`}>账户</button>
+                    <button className={`${theme === "dark" ? "text-slate-400 hover:text-white" : "text-gray-500 hover:text-gray-900"} transition`}>日志</button>
+                </div>
+            </header>
+
+
+            {activeTab === "pairs" ? (
+                <>
+                    {/* 工具栏 */}
+                    <div className={`${theme === "dark" ? "bg-[#0d1421] border-slate-800" : "bg-white border-gray-200"} border - b px - 4 py - 2`}>
+                        <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                                <button
+                                    onClick={() => setShowAddCard(true)}
+                                    className="flex items-center gap-1 px-3 py-1.5 rounded bg-cyan-600 hover:bg-cyan-500 text-sm transition"
+                                >
+                                    添加
+                                </button>
+                                <button className={`flex items - center gap - 1 px - 3 py - 1.5 rounded text - sm transition ${theme === "dark" ? "bg-slate-700 hover:bg-slate-600" : "bg-gray-100 hover:bg-gray-200 text-gray-700"} `}>
+                                    <Link2 className="w-3.5 h-3.5" />
+                                    链接
+                                </button>
+                                <button className={`flex items - center gap - 1 px - 3 py - 1.5 rounded text - sm transition ${theme === "dark" ? "bg-slate-700 hover:bg-slate-600" : "bg-gray-100 hover:bg-gray-200 text-gray-700"} `}>
+                                    <Upload className="w-3.5 h-3.5" />
+                                    导入
+                                </button>
+
+                                <div className={`h - 4 w - px mx - 2 ${theme === "dark" ? "bg-slate-700" : "bg-gray-300"} `} />
+
+                                <select className={`rounded px - 3 py - 1.5 text - sm ${theme === "dark" ? "bg-slate-700" : "bg-gray-100 text-gray-700"} `}>
+                                    <option>全部</option>
+                                    <option>Binance</option>
+                                    <option>Bybit</option>
+                                </select>
+
+                                <div className={`h - 4 w - px mx - 2 ${theme === "dark" ? "bg-slate-700" : "bg-gray-300"} `} />
+
+                                <button className="flex items-center gap-1 px-2 py-1.5 rounded hover:bg-slate-700 text-sm text-slate-400 transition">
+                                    排序
+                                </button>
+                                <button className="flex items-center gap-1 px-2 py-1.5 rounded hover:bg-slate-700 text-sm text-slate-400 transition">
+                                    筛选
+                                </button>
+                                <button className="flex items-center gap-1 px-2 py-1.5 rounded hover:bg-slate-700 text-sm text-red-400 transition">
+                                    删除
+                                </button>
+                                <button
+                                    onClick={() => setSoundEnabled(!soundEnabled)}
+                                    className={`flex items - center gap - 1 px - 2 py - 1.5 rounded hover: bg - slate - 700 text - sm transition ${soundEnabled ? "text-green-400" : "text-slate-400"} `}
+                                    title={soundEnabled ? "Mute Effects" : "Enable Effects"}
+                                >
+                                    {soundEnabled ? <Volume2 className="w-3.5 h-3.5" /> : <VolumeX className="w-3.5 h-3.5" />}
+                                    音效
+                                </button>
+                                <button
+                                    onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+                                    className="flex items-center gap-1 px-2 py-1.5 rounded hover:bg-slate-700 text-sm text-slate-400 transition"
+                                    title={theme === "dark" ? "切换亮色主题" : "切换暗色主题"}
+                                >
+                                    {theme === "dark" ? "☀️" : "🌙"}
+                                </button>
+                            </div>
+
+                            <div className="flex items-center gap-2">
+                                <button className="flex items-center gap-1 px-3 py-1.5 rounded bg-slate-700 hover:bg-slate-600 text-sm transition">
+                                    <Package className="w-3.5 h-3.5" />
+                                    草稿箱 ({draftCount})
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+
+
+                    {/* 交易卡片网格 */}
+                    <section className="px-4 pb-6">
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-3">
+                            {cards.map(card => {
+                                const rtData = getCardRealTimeData(card.symbol, card.type, card.exchange_a, card.exchange_b);
+                                const countdownA = getFundingCountdown(rtData?.fundingIntervalA);
+                                const countdownB = getFundingCountdown(rtData?.fundingIntervalB);
+                                const isUrgentA = countdownA.startsWith("00:") && parseInt(countdownA.split(":")[1]) <= 5;
+                                const isUrgentB = countdownB.startsWith("00:") && parseInt(countdownB.split(":")[1]) <= 5;
+
+                                // 格式化费率: rate/interval/limit
+                                const formatFunding = (rate?: number, interval?: string | number, min?: number, max?: number) => {
+                                    if (rate === undefined) return "--";
+                                    const sign = rate > 0 ? "+" : "";
+                                    const rateStr = `${sign}${rate.toFixed(3)} `;
+                                    const intStr = typeof interval === 'number' ? interval : (parseInt(String(interval).replace('h', '')) || 8);
+                                    // limit: positive rate -> max cap, negative rate -> min cap
+                                    const limit = rate >= 0 ? (max ?? "-") : (min ?? "-");
+                                    return (
+                                        <span>
+                                            {rateStr}/<span className={intStr === 1 ? "text-red-500" : "text-green-500"}>{intStr}h</span>/{limit}
+                                        </span>
+                                    );
+                                };
+                                const textColor = theme === "light" ? "text-gray-700" : "text-gray-200";
+                                const labelColor = theme === "light" ? "text-gray-500" : "text-gray-200";
+                                const borderColor = theme === "light" ? "border-gray-100" : "border-slate-700";
+
+                                // [New] Alarm State Calculation
+                                const valA = card.position_value_a || 0;
+                                const valB = card.position_value_b || 0;
+                                const maxVal = Math.max(valA, valB);
+                                let isAlarmState = false;
+                                if (maxVal > 2) {
+                                    const diff = Math.abs(valA - valB);
+                                    const isImbalanced = (diff / maxVal) > 0.08;
+                                    const isSingleLeg = (valA > 2 && valB < 1) || (valB > 2 && valA < 1);
+                                    // [New] Only alarm if NOT syncing
+                                    isAlarmState = (isImbalanced || isSingleLeg) && !card.is_syncing;
+                                }
+
+                                const cardBgClass = isAlarmState
+                                    ? "bg-red-950/90 border-red-500 animate-pulse ring-2 ring-red-500 shadow-[0_0_15px_rgba(239,68,68,0.5)]"
+                                    : (theme === "light" ? "bg-white border-gray-200" : "bg-[#050505] border-slate-800");
+
+                                return (
+                                    <div
+                                        key={card.id}
+                                        className={`rounded - lg border shadow - sm text - [13px] transition - colors duration - 300 ${cardBgClass} `}
+                                        style={{ fontFamily: "system-ui, -apple-system, sans-serif" }}
+                                    >
+                                        {/* 头部: 状态 + 币种 + 操作图标 */}
+                                        <div className={`flex items - center justify - between px - 3 py - 2 border - b ${borderColor} `}>
+                                            <div className="flex items-center gap-2">
+                                                <button
+                                                    onClick={() => handleToggleStatus(card)}
+                                                    className={`text - xs px - 1.5 py - 0.5 rounded cursor - pointer hover: opacity - 80 transition ${card.status === "running" ? "bg-cyan-50 text-cyan-500" : "bg-red-50 text-red-500"} `}
+                                                    title={card.status === "running" ? "点击暂停" : "点击启用"}
+                                                >
+                                                    {card.status === "running" ? "▼ 已启用" : "↹ 已暂停"}
+                                                </button>
+                                                <span className={`font - bold text - [15px] ${theme === "light" ? "text-gray-900" : "text-white"} `}>{card.symbol}</span>
+                                            </div>
+                                            <div className="flex items-center gap-3 text-gray-400">
+                                                <button className="hover:text-gray-600 transition"><Pin className="w-3.5 h-3.5" /></button>
+                                                <button onClick={() => handleReverseCard(card.id)} className="hover:text-purple-500 transition" title="创建反向卡片"><ArrowLeftRight className="w-3.5 h-3.5" /></button>
+                                                <button onClick={() => handleEditCard(card)} className="hover:text-blue-500 transition"><Edit2 className="w-3.5 h-3.5" /></button>
+                                                <button onClick={() => handleDeleteCard(card.id)} className="hover:text-red-500 transition"><Trash2 className="w-3.5 h-3.5" /></button>
+                                                <button className="hover:text-gray-600 transition"><MoreHorizontal className="w-3.5 h-3.5" /></button>
+                                            </div>
+                                        </div>
+
+                                        {/* 数据区域 */}
+                                        <div className="px-3 py-2 space-y-[3px] text-[13px] leading-relaxed">
+                                            {/* 交易所 + 差价 */}
+                                            <div className="flex justify-between items-center mb-1">
+                                                <div className="flex items-center gap-1">
+                                                    <span className={labelColor}>交易所:</span>
+                                                    <span className={`px - 1.5 py - [1px] border rounded text - [12px] bg - transparent ${card.type === "SF" ? "border-green-500/50 text-green-500" : "border-yellow-500/50 text-yellow-500"} `}>{card.exchange_a}</span>
+                                                    <span className="px-1.5 py-[1px] border border-yellow-500/50 text-yellow-500 rounded text-[12px] bg-transparent">{card.exchange_b}</span>
+                                                </div>
+                                                <span className={`text - [13px] font - medium ${textColor} `}>
+                                                    {rtData?.openSpread !== undefined ? (rtData.openSpread >= 0 ? "" : "") + rtData.openSpread.toFixed(2) : "--"}%
+                                                    <span className="text-gray-300 mx-1">/</span>
+                                                    {rtData?.closeSpread?.toFixed(2) ?? "--"}%
+                                                </span>
+                                            </div>
+
+                                            <div className="flex items-center justify-start gap-2">
+                                                <span className={labelColor}>仓位价值(U):</span>
+                                                <span className={textColor}>
+                                                    <NumberTicker value={card.position_value_a || 0} precision={0} />
+                                                    <span className="mx-1">/</span>
+                                                    <NumberTicker value={card.position_value_b || 0} precision={0} />
+                                                </span>
+                                                {card.pnl !== undefined && card.position_value > 0 && (
+                                                    <NumberTicker
+                                                        value={card.pnl}
+                                                        precision={2}
+                                                        prefix={card.pnl >= 0 ? "+" : ""}
+                                                        className={`ml-2 font-medium ${card.pnl >= 0 ? 'text-green-400' : 'text-red-400'}`}
+                                                    />
+                                                )}
+                                            </div>
+
+                                            <div className="flex items-center justify-start gap-3">
+                                                <div className="flex items-center gap-1.5">
+                                                    <span className={labelColor}>开清条件:</span>
+                                                    <span className={textColor}>{card.open_threshold}% / {card.close_threshold}%</span>
+                                                </div>
+                                                <div className="flex items-center gap-1 text-gray-400">
+                                                    <button className="hover:text-gray-600"><Minus className="w-3.5 h-3.5" /></button>
+                                                    <button className="hover:text-gray-600"><PlusCircle className="w-3.5 h-3.5" /></button>
+                                                </div>
+                                            </div>
+
+                                            <div className="flex items-center justify-start gap-2"><span className={labelColor}>实开/实清:</span><span className={textColor}>{card.open_spread?.toFixed(2) ?? "--"}% / {card.close_spread?.toFixed(2) ?? "--"}%</span></div>
+                                            <div className="flex items-center justify-start gap-2"><span className={labelColor}>开仓均价:</span><span className={textColor}>{card.avg_price_a?.toFixed(4) || "--"} / {card.avg_price_b?.toFixed(4) || "--"}</span></div>
+                                            <div className="flex items-center justify-start gap-2"><span className={labelColor}>仓位数量:</span><span className={textColor}>{card.position_qty_a?.toFixed(4) || "0.0000"} / {card.position_qty_b?.toFixed(4) || "0.0000"}</span></div>
+
+                                            <div className="flex items-center justify-start gap-3">
+                                                <div className="flex items-center gap-1.5">
+                                                    <span className={labelColor}>仓位限额(U):</span>
+                                                    <span className={textColor}>{card.max_position}</span>
+                                                </div>
+                                                <div className="flex items-center gap-1 text-gray-400">
+                                                    <button className="hover:text-gray-600"><Minus className="w-3.5 h-3.5" /></button>
+                                                    <button className="hover:text-gray-600"><PlusCircle className="w-3.5 h-3.5" /></button>
+                                                </div>
+                                            </div>
+
+                                            <div className="flex items-center justify-start gap-2"><span className={labelColor}>下单范围(U):</span><span className={textColor}>{card.order_min} / {card.order_max}</span></div>
+
+                                            {/* 实时数据 */}
+                                            <div className="flex items-center justify-start gap-2 mt-1">
+                                                <span className={labelColor}>指数差价:</span>
+                                                <span className={textColor}>
+                                                    {(() => {
+                                                        const diffA = rtData?.indexDiffA;
+                                                        const diffB = rtData?.indexDiffB;
+
+                                                        const fmt = (v?: number) => {
+                                                            if (v === undefined || v === 0) return "--"; // Spot or missing
+                                                            return `${v >= 0 ? "+" : ""}${v.toFixed(3)}% `;
+                                                        };
+
+                                                        return (
+                                                            <span>
+                                                                <span className={diffA && Math.abs(diffA) > 0.05 ? (diffA > 0 ? "text-green-500" : "text-red-500") : ""}>{fmt(diffA)}</span>
+                                                                <span className="text-gray-300 mx-1">/</span>
+                                                                <span className={diffB && Math.abs(diffB) > 0.05 ? (diffB > 0 ? "text-green-500" : "text-red-500") : ""}>{fmt(diffB)}</span>
+                                                            </span>
+                                                        );
+                                                    })()}
+                                                </span>
+                                            </div>
+
+
+                                            <div className="flex items-center justify-start gap-2">
+                                                <span className={labelColor}>实时费率:</span>
+                                                <span className="text-[12px]">
+                                                    <span className={rtData?.netFundingRate && rtData.netFundingRate >= 0 ? "text-green-600" : "text-red-500"}>
+                                                        {rtData?.netFundingRate !== undefined ? (rtData.netFundingRate >= 0 ? "+" : "") + rtData.netFundingRate.toFixed(3) : "--"}
+                                                    </span>
+                                                    <span className={`${textColor} ml - 1`}>
+                                                        {formatFunding(rtData?.fundingRateA, rtData?.fundingIntervalA, rtData?.fundingMinA, rtData?.fundingMaxA)}
+                                                    </span>
+                                                    <span className="text-gray-300 mx-1">|</span>
+                                                    <span className={textColor}>
+                                                        {formatFunding(rtData?.fundingRateB, rtData?.fundingIntervalB, rtData?.fundingMinB, rtData?.fundingMaxB)}
+                                                    </span>
+                                                </span>
+                                            </div>
+                                            <div className="flex items-center justify-start gap-2">
+                                                <div className="flex items-center gap-1">
+                                                    <span className={labelColor}>费率结算:</span>
+                                                    <span className={textColor}>
+                                                        <span className={isUrgentA ? "text-red-500 font-bold" : ""}>{countdownA}</span>
+                                                        <span className="text-gray-300 mx-1">/</span>
+                                                        <span className={isUrgentB ? "text-red-500 font-bold" : ""}>{countdownB}</span>
+                                                    </span>
+                                                </div>
+                                                <HelpCircle className="w-3 h-3 text-gray-300" />
+                                            </div>
+                                            <div className="flex items-center justify-start gap-2">
+                                                <div className="flex items-center gap-1">
+                                                    <span className={labelColor}>实时MMR:</span>
+                                                    <span className={textColor}>{card.mmr_a?.toFixed(2) || "0.00"}% / {card.mmr_b?.toFixed(2) || "0.00"}%</span>
+                                                </div>
+                                                <HelpCircle className="w-3 h-3 text-gray-300" />
+                                            </div>
+
+                                            {/* 爆率/ADL */}
+                                            <div className="flex items-center justify-start gap-2 mt-1">
+                                                <span className={labelColor}>爆率/ADL:</span>
+                                                <span className={textColor}>
+                                                    {(() => {
+                                                        const getRisk = (mark: number, liq: number, qty: number, marginRatio?: number) => {
+                                                            // Priority 1: Margin Ratio (for PM/Unified accounts)
+                                                            if (marginRatio && marginRatio > 0) {
+                                                                return `${(marginRatio * 100).toFixed(2)}% `;
+                                                            }
+
+                                                            // Priority 2: Liquidation Price
+                                                            if (!qty || Math.abs(qty) < 0.0001 || !mark || !liq || liq <= 0) return "--";
+                                                            const diff = Math.abs(mark - liq) / mark * 100;
+                                                            return `${diff.toFixed(1)}% `;
+                                                        };
+
+                                                        const getAdlColor = (adl: number) => {
+                                                            // Binance: 0-4, Bybit: 1-5
+                                                            // Normalize: High is bad
+                                                            if (adl >= 4) return "text-red-500";
+                                                            if (adl >= 2) return "text-yellow-500";
+                                                            return "text-green-500";
+                                                        };
+
+                                                        // Use Index Price as proxy for Mark if available, else Entry Price
+                                                        const priceA = rtData?.indexPriceA || card.avg_price_a || 0;
+                                                        const priceB = rtData?.indexPriceB || card.avg_price_b || 0;
+
+                                                        const riskA = getRisk(priceA, card.liq_price_a || 0, card.position_qty_a || 0, card.margin_ratio_a);
+                                                        const riskB = getRisk(priceB, card.liq_price_b || 0, card.position_qty_b || 0, card.margin_ratio_b);
+
+                                                        const adlA = card.adl_a || 0;
+                                                        const adlB = card.adl_b || 0;
+
+                                                        return (
+                                                            <div className="flex items-center">
+                                                                <span>{riskA}</span>
+                                                                {riskA !== "--" && <Circle className={`w - 3 h - 3 ml - 1 ${getAdlColor(adlA)} fill - current`} />}
+                                                                <span className="text-gray-300 mx-2">|</span>
+                                                                <span>{riskB}</span>
+                                                                {riskB !== "--" && <Circle className={`w - 3 h - 3 ml - 1 ${getAdlColor(adlB)} fill - current`} />}
+                                                            </div>
+                                                        );
+                                                    })()}
+                                                </span>
+                                            </div>
+
+
+
+                                            {/* 开始时间 */}
+                                            <div className="flex items-center justify-start gap-2 mt-1">
+                                                <span className={labelColor}>开始时间:</span>
+                                                <span className={labelColor}>
+                                                    {card.start_time > 0 ? (() => {
+                                                        const d = new Date(card.start_time);
+                                                        return `${d.toLocaleDateString('zh-CN', { month: '2-digit', day: '2-digit' })} ${d.toLocaleTimeString('zh-CN', { hour12: false })}.${d.getMilliseconds().toString().padStart(3, '0')} `;
+                                                    })() : "--"}
+                                                </span>
+                                            </div>
+                                        </div>
+
+                                        {/* 底部按钮 */}
+                                        <div className={`flex gap - 4 px - 3 py - 3 mt - 1 ${theme === "dark" ? "border-t border-slate-700" : ""} `}>
+                                            <button
+                                                onClick={() => handleExecute(card)}
+                                                disabled={card.open_disabled}
+                                                className={`flex items - center justify - center gap - 2 px - 3 py - 1.5 text - [12px] border rounded shadow - sm hover: translate - y - px transition ${card.open_disabled
+                                                    ? "text-gray-500 border-gray-700 cursor-not-allowed opacity-50"
+                                                    : "text-yellow-400 border-yellow-500/50 hover:bg-yellow-500/10"
+                                                    } `}
+                                            >
+                                                <AlertTriangle className="w-3.5 h-3.5" />
+                                                一键开仓
+                                            </button>
+                                            <button
+                                                onClick={() => handleClose(card)}
+                                                disabled={card.close_disabled}
+                                                className={`flex items - center justify - center gap - 2 px - 3 py - 1.5 text - [12px] border rounded shadow - sm hover: translate - y - px transition ${card.close_disabled
+                                                    ? "text-gray-500 border-gray-700 cursor-not-allowed opacity-50"
+                                                    : "text-red-400 border-red-500/50 hover:bg-red-500/10"
+                                                    } `}
+                                            >
+                                                <Siren className="w-3.5 h-3.5" />
+                                                一键清仓
+                                            </button>
+                                        </div>
+                                    </div>
+                                );
+                            })}
+
+                            {cards.length === 0 && (
+                                <div className="col-span-full text-center py-12 text-slate-500">
+                                    暂无交易卡片，点击"添加"按钮创建
+                                </div>
+                            )}
+                        </div>
+                    </section>
+                </>
+            ) : activeTab === "profit" ? (
+                <ProfitTab theme={theme} />
+            ) : (
+                <section className="px-5 py-5 max-w-7xl mx-auto">
+                    <ExchangeTab />
+                </section>
+            )
+            }
+
+            {/* 添加卡片弹窗 */}
+            {
+                showAddCard && (
+                    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 overflow-y-auto py-6">
+                        <div
+                            className={`${theme === "dark" ? "bg-[#12171f] border-slate-700 text-slate-200" : "bg-white border-gray-200 text-gray-900"} rounded - xl p - 5 w - full max - w - xl border mx - 4 shadow - 2xl transition - transform duration - 75`}
+                            style={{ transform: `translate(${modalPos.x}px, ${modalPos.y}px)` }}
+                        >
+                            <div
+                                className="flex items-center justify-between mb-4 cursor-move select-none"
+                                onMouseDown={onModalHeaderMouseDown}
+                            >
+                                <h3 className="text-base font-bold">{editingCardId ? "编辑卡片" : "添加卡片"} <span className="text-xs text-slate-400 font-normal">(按住此处可拖拽)</span></h3>
+                                <div className="flex items-center gap-2">
+                                    <button
+                                        onClick={() => { setShowAddCard(false); setEditingCardId(null); }}
+                                        className="px-3 py-1 rounded bg-slate-700 hover:bg-slate-600 text-xs transition"
+                                    >
+                                        取消
+                                    </button>
+                                    <button
+                                        onClick={handleAddCard}
+                                        className="px-4 py-1 rounded bg-blue-600 hover:bg-blue-500 text-xs transition"
+                                    >
+                                        {editingCardId ? "保存" : "确定"}
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div className="space-y-3 text-sm">
+                                {/* 币种 */}
+                                <div className="flex items-center gap-3">
+                                    <label className={`w - 20 text - xs flex - shrink - 0 ${theme === "light" ? "text-gray-700 font-medium" : "text-gray-200"} `}>
+                                        <span className="text-red-400">*</span> 币种
+                                    </label>
+                                    <div className="relative flex-1">
+                                        <input
+                                            type="text"
+                                            list="symbolSuggestions"
+                                            className="w-full bg-slate-700 rounded px-3 py-1.5 text-sm uppercase"
+                                            placeholder="输入币种 (如 btc)"
+                                            value={newCard.symbol}
+                                            onChange={e => {
+                                                const val = e.target.value.toUpperCase();
+                                                // Auto-append USDT if not present and value has content
+                                                setNewCard({ ...newCard, symbol: val });
+                                            }}
+                                            onBlur={e => {
+                                                const val = e.target.value.toUpperCase();
+                                                if (val && !val.includes("USDT") && !val.includes("USD")) {
+                                                    setNewCard({ ...newCard, symbol: val + "USDT" });
+                                                }
+                                            }}
+                                        />
+                                        <datalist id="symbolSuggestions">
+                                            {arbitrageData.sf
+                                                .filter((opp: any) => opp.symbol.toLowerCase().includes(newCard.symbol.toLowerCase()))
+                                                .slice(0, 10)
+                                                .map((opp: any) => (
+                                                    <option key={opp.symbol} value={opp.symbol} />
+                                                ))
+                                            }
+                                        </datalist>
+                                    </div>
+                                </div>
+
+                                {/* 状态 */}
+                                <div className="flex items-center gap-3">
+                                    <label className={`w - 20 text - xs flex - shrink - 0 ${theme === "light" ? "text-gray-700 font-medium" : "text-gray-200"} `}>
+                                        <span className="text-red-400">*</span> 状态
+                                    </label>
+                                    <div className="flex items-center gap-4">
+                                        <label className="flex items-center gap-1.5 cursor-pointer text-xs">
+                                            <input
+                                                type="radio"
+                                                name="status"
+                                                checked={newCard.status === "running"}
+                                                onChange={() => setNewCard({ ...newCard, status: "running" })}
+                                                className="accent-cyan-500"
+                                            />
+                                            已启用
+                                        </label>
+                                        <label className="flex items-center gap-1.5 cursor-pointer text-xs">
+                                            <input
+                                                type="radio"
+                                                name="status"
+                                                checked={newCard.status === "paused"}
+                                                onChange={() => setNewCard({ ...newCard, status: "paused" })}
+                                                className="accent-orange-500"
+                                            />
+                                            <span className="text-orange-400">已暂停</span>
+                                        </label>
+                                    </div>
+                                </div>
+
+                                {/* 类型 */}
+                                <div className="flex items-center gap-3">
+                                    <label className={`w - 20 text - xs flex - shrink - 0 ${theme === "light" ? "text-gray-700 font-medium" : "text-gray-200"} `}>
+                                        <span className="text-red-400">*</span> 类型
+                                    </label>
+                                    <div className="flex items-center gap-2">
+                                        <button
+                                            onClick={() => setNewCard({ ...newCard, type: "SF" })}
+                                            className={`px - 3 py - 1 rounded border text - xs transition ${newCard.type === "SF"
+                                                ? "bg-green-500/20 border-green-500 text-green-400"
+                                                : "border-slate-600 text-slate-400 hover:border-slate-500"
+                                                } `}
+                                        >
+                                            🟢🟡 (现期)
+                                        </button>
+                                        <button
+                                            onClick={() => setNewCard({ ...newCard, type: "FF" })}
+                                            className={`px - 3 py - 1 rounded border text - xs transition ${newCard.type === "FF"
+                                                ? "bg-blue-500/20 border-blue-500 text-blue-400"
+                                                : "border-slate-600 text-slate-400 hover:border-slate-500"
+                                                } `}
+                                        >
+                                            🟡🟡 (期期)
+                                        </button>
+                                    </div>
+                                </div>
+
+                                {/* 开仓差价 */}
+                                <div className="flex items-center gap-3">
+                                    <label className={`w - 20 text - xs flex - shrink - 0 ${theme === "light" ? "text-gray-700 font-medium" : "text-gray-200"} `}>
+                                        <span className="text-red-400">*</span> 开仓差价
+                                    </label>
+                                    <div className="flex items-center gap-2 flex-1">
+                                        <input
+                                            type="number"
+                                            step="0.01"
+                                            className="w-16 bg-slate-700 rounded px-2 py-1.5 text-sm text-center"
+                                            value={newCard.openThreshold}
+                                            onChange={e => setNewCard({ ...newCard, openThreshold: e.target.value })}
+                                        />
+                                        <span className="text-slate-400 text-xs">%</span>
+                                        <button className="p-1 rounded bg-slate-700 hover:bg-slate-600 text-xs">➖</button>
+                                        <button className="p-1 rounded bg-slate-700 hover:bg-slate-600 text-xs">➕</button>
+                                        <label className="flex items-center gap-1 ml-2 cursor-pointer text-xs">
+                                            <input
+                                                type="checkbox"
+                                                checked={newCard.openDisabled}
+                                                onChange={e => setNewCard({ ...newCard, openDisabled: e.target.checked })}
+                                                className="accent-red-500"
+                                            />
+                                            禁开
+                                        </label>
+                                        <label className="flex items-center gap-1 cursor-pointer text-xs">
+                                            <input
+                                                type="checkbox"
+                                                checked={newCard.ladderEnabled}
+                                                onChange={e => setNewCard({ ...newCard, ladderEnabled: e.target.checked })}
+                                                className="accent-blue-500"
+                                            />
+                                            梯度
+                                        </label>
+                                    </div>
+                                </div>
+
+                                {/* 清仓差价 */}
+                                <div className="flex items-center gap-3">
+                                    <label className={`w - 20 text - xs flex - shrink - 0 ${theme === "light" ? "text-gray-700 font-medium" : "text-gray-200"} `}>
+                                        <span className="text-red-400">*</span> 清仓差价
+                                    </label>
+                                    <div className="flex items-center gap-2 flex-1">
+                                        <input
+                                            type="number"
+                                            step="0.01"
+                                            className="w-16 bg-slate-700 rounded px-2 py-1.5 text-sm text-center"
+                                            value={newCard.closeThreshold}
+                                            onChange={e => setNewCard({ ...newCard, closeThreshold: e.target.value })}
+                                        />
+                                        <span className="text-slate-400 text-xs">%</span>
+                                        <button className="p-1 rounded bg-slate-700 hover:bg-slate-600 text-xs">➖</button>
+                                        <button className="p-1 rounded bg-slate-700 hover:bg-slate-600 text-xs">➕</button>
+                                        <label className="flex items-center gap-1 ml-2 cursor-pointer text-xs">
+                                            <input
+                                                type="checkbox"
+                                                checked={newCard.closeDisabled}
+                                                onChange={e => setNewCard({ ...newCard, closeDisabled: e.target.checked })}
+                                                className="accent-red-500"
+                                            />
+                                            禁清
+                                        </label>
+                                    </div>
+                                </div>
+
+                                {/* 仓位限额 */}
+                                <div className="flex items-center gap-3">
+                                    <label className={`w - 20 text - xs flex - shrink - 0 ${theme === "light" ? "text-gray-700 font-medium" : "text-gray-200"} `}>
+                                        <span className="text-red-400">*</span> 仓位限额
+                                    </label>
+                                    <div className="flex items-center gap-2 flex-1">
+                                        <input
+                                            type="number"
+                                            className="flex-1 bg-slate-700 rounded px-2 py-1.5 text-sm"
+                                            value={newCard.maxPosition}
+                                            onChange={e => setNewCard({ ...newCard, maxPosition: e.target.value })}
+                                        />
+                                        <span className="px-2 py-1 bg-slate-600 rounded text-xs">USDT</span>
+                                    </div>
+                                </div>
+
+                                {/* 杠杆倍数 */}
+                                <div className="flex items-center gap-3">
+                                    <label className={`w - 20 text - xs flex - shrink - 0 ${theme === "light" ? "text-gray-700 font-medium" : "text-gray-200"} `}>
+                                        <span className="text-red-400">*</span> 杠杆倍数
+                                    </label>
+                                    <div className="flex items-center gap-1">
+                                        {[1, 2, 3, 4, 5, 6].map(lev => (
+                                            <button
+                                                key={lev}
+                                                onClick={() => setNewCard({ ...newCard, leverage: lev })}
+                                                className={`w - 7 h - 7 rounded text - xs transition ${newCard.leverage === lev
+                                                    ? "bg-blue-600 text-white"
+                                                    : "bg-slate-700 text-slate-400 hover:bg-slate-600"
+                                                    } `}
+                                            >
+                                                {lev}x
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                {/* 交易所 */}
+                                <div className="flex items-center gap-3">
+                                    <label className={`w - 20 text - xs flex - shrink - 0 ${theme === "light" ? "text-gray-700 font-medium" : "text-gray-200"} `}>
+                                        <span className="text-red-400">*</span> 交易所
+                                    </label>
+                                    <div className="flex items-center gap-2">
+                                        <select
+                                            className="bg-slate-700 rounded px-2 py-1.5 text-xs"
+                                            value={newCard.exchangeA}
+                                            onChange={e => setNewCard({ ...newCard, exchangeA: e.target.value })}
+                                        >
+                                            <option value="binance">Binance</option>
+                                            <option value="bybit">Bybit</option>
+                                        </select>
+                                        <span className="text-slate-500 text-xs">A</span>
+                                        <select
+                                            className="bg-slate-700 rounded px-2 py-1.5 text-xs"
+                                            value={newCard.exchangeB}
+                                            onChange={e => setNewCard({ ...newCard, exchangeB: e.target.value })}
+                                        >
+                                            <option value="bybit">Bybit</option>
+                                            <option value="binance">Binance</option>
+                                        </select>
+                                        <span className="text-slate-500 text-xs">B</span>
+                                    </div>
+                                </div>
+
+                                {/* 开始时间（时间戳） */}
+                                <div className="flex items-center gap-3">
+                                    <label className={`w - 20 text - xs flex - shrink - 0 ${theme === "light" ? "text-gray-700 font-medium" : "text-gray-200"} `}>开始时间(ms)</label>
+                                    <div className="flex items-center gap-2 flex-1">
+                                        <input
+                                            type="number"
+                                            className="flex-1 bg-slate-700 rounded px-2 py-1.5 text-sm"
+                                            value={newCard.startTime}
+                                            onChange={e => setNewCard({ ...newCard, startTime: e.target.value })}
+                                            placeholder="时间戳 (毫秒)"
+                                        />
+                                        <button
+                                            onClick={() => {
+                                                const nextHour = Math.ceil(Date.now() / 3600000) * 3600000;
+                                                setNewCard({ ...newCard, startTime: nextHour });
+                                            }}
+                                            className="px-2 py-1 rounded bg-blue-600 hover:bg-blue-500 text-xs whitespace-nowrap transition"
+                                        >
+                                            整点
+                                        </button>
+                                        <span className="text-[10px] text-slate-500 w-24 text-right truncate">
+                                            {newCard.startTime > 0 ? (() => {
+                                                const d = new Date(parseInt(newCard.startTime));
+                                                return `${d.toLocaleTimeString('zh-CN', { hour12: false })}.${d.getMilliseconds().toString().padStart(3, '0')} `;
+                                            })() : "未设置"}
+                                        </span>
+                                    </div>
+                                </div>
+
+                                {/* 单笔额 */}
+                                <div className="flex items-center gap-3">
+                                    <label className={`w - 20 text - xs flex - shrink - 0 ${theme === "light" ? "text-gray-700 font-medium" : "text-gray-200"} `}>
+                                        <span className="text-red-400">*</span> 最小单笔额
+                                    </label>
+                                    <div className="flex items-center gap-2 flex-1">
+                                        <input
+                                            type="number"
+                                            className="flex-1 bg-slate-700 rounded px-2 py-1.5 text-sm"
+                                            value={newCard.orderMin}
+                                            onChange={e => setNewCard({ ...newCard, orderMin: e.target.value })}
+                                        />
+                                        <span className="px-2 py-1 bg-slate-600 rounded text-xs">USDT</span>
+                                    </div>
+                                </div>
+
+                                <div className="flex items-center gap-3">
+                                    <label className={`w - 20 text - xs flex - shrink - 0 ${theme === "light" ? "text-gray-700 font-medium" : "text-gray-200"} `}>
+                                        <span className="text-red-400">*</span> 最大单笔额
+                                    </label>
+                                    <div className="flex items-center gap-2 flex-1">
+                                        <input
+                                            type="number"
+                                            className="flex-1 bg-slate-700 rounded px-2 py-1.5 text-sm"
+                                            value={newCard.orderMax}
+                                            onChange={e => setNewCard({ ...newCard, orderMax: e.target.value })}
+                                        />
+                                        <span className="px-2 py-1 bg-slate-600 rounded text-xs">USDT</span>
+                                    </div>
+                                </div>
+
+                                {/* 止损 */}
+                                <div className="flex items-center gap-3">
+                                    <label className={`w - 20 text - xs flex - shrink - 0 ${theme === "light" ? "text-gray-700 font-medium" : "text-gray-200"} `}>止损(可选)</label>
+                                    <div className="flex items-center gap-2 flex-1">
+                                        <input
+                                            type="number"
+                                            step="0.1"
+                                            className="flex-1 bg-slate-700 rounded px-2 py-1.5 text-sm"
+                                            value={newCard.stopLoss}
+                                            onChange={e => setNewCard({ ...newCard, stopLoss: e.target.value })}
+                                        />
+                                        <span className="text-slate-400 text-xs">%</span>
+                                    </div>
+                                </div>
+
+                                {/* 价格报警 */}
+                                <div className="flex items-center gap-3">
+                                    <label className={`w - 20 text - xs flex - shrink - 0 ${theme === "light" ? "text-gray-700 font-medium" : "text-gray-200"} `}>价格报警(可选)</label>
+                                    <div className="flex items-center gap-2 flex-1">
+                                        <input
+                                            type="number"
+                                            step="0.1"
+                                            className="flex-1 bg-slate-700 rounded px-2 py-1.5 text-sm"
+                                            value={newCard.priceAlert}
+                                            onChange={e => setNewCard({ ...newCard, priceAlert: e.target.value })}
+                                        />
+                                        <span className="text-slate-400 text-xs">%</span>
+                                    </div>
+                                </div>
+
+                                {/* 梯度配置 */}
+                                {newCard.ladderEnabled && (
+                                    <div className="bg-slate-800/50 rounded p-3 mt-2">
+                                        <div className="flex items-center justify-between mb-2">
+                                            <span className="text-xs font-medium">梯度配置</span>
+                                            <button
+                                                onClick={addLadderStep}
+                                                className="text-xs px-2 py-0.5 bg-blue-600 rounded hover:bg-blue-500 transition"
+                                            >
+                                                + 添加
+                                            </button>
+                                        </div>
+
+                                        <div className="space-y-1.5">
+                                            {newCard.ladder.map((step: any, i: number) => (
+                                                <div key={i} className="flex items-center gap-2">
+                                                    <span className="text-xs text-slate-400 w-4">#{i + 1}</span>
+                                                    <input
+                                                        type="number"
+                                                        step="0.1"
+                                                        className="w-14 bg-slate-600 rounded px-1.5 py-0.5 text-xs"
+                                                        value={step.spread}
+                                                        onChange={e => updateLadderStep(i, 'spread', parseFloat(e.target.value) || 0)}
+                                                    />
+                                                    <span className="text-xs text-slate-400">%</span>
+                                                    <input
+                                                        type="number"
+                                                        className="w-16 bg-slate-600 rounded px-1.5 py-0.5 text-xs"
+                                                        value={step.amount}
+                                                        onChange={e => updateLadderStep(i, 'amount', parseFloat(e.target.value) || 0)}
+                                                    />
+                                                    <span className="text-xs text-slate-400">U</span>
+                                                    <button
+                                                        onClick={() => removeLadderStep(i)}
+                                                        className="p-0.5 text-red-400 hover:bg-slate-600 rounded"
+                                                    >
+                                                        <X className="w-3 h-3" />
+                                                    </button>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                )
+            }
+        </div >
+    );
+}

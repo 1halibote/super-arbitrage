@@ -1,0 +1,81 @@
+ERROR:root:[BULK FETCH] Failed for gate: gate {"label":"INVALID_PARAM_VALUE","message":"invalid limit, must in (0, 100]"}
+--- Before Sync ---
+Card A: qty=20.0 val=20.0
+Card B: qty=20.0 val=20.0
+Card Total: 20.0
+
+--- Running sync_all_cards ---
+Traceback (most recent call last):
+  File "F:\xiangmu\bn-by\_test_gate_sync.py", line 63, in <module>
+    asyncio.run(test())
+  File "C:\Users\Administrator\AppData\Local\Programs\Python\Python312\Lib\asyncio\runners.py", line 194, in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+  File "C:\Users\Administrator\AppData\Local\Programs\Python\Python312\Lib\asyncio\runners.py", line 118, in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Administrator\AppData\Local\Programs\Python\Python312\Lib\asyncio\base_events.py", line 687, in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+  File "F:\xiangmu\bn-by\_test_gate_sync.py", line 56, in test
+    await cm.sync_all_cards()
+  File "F:\xiangmu\bn-by\backend\execution\card_manager.py", line 192, in sync_all_cards
+    self._save()
+  File "F:\xiangmu\bn-by\backend\execution\card_manager.py", line 88, in _save
+    data[cid] = {k: getattr(card, k) for k in valid_keys}
+                    ^^^^^^^^^^^^^^^^
+AttributeError: 'DummyCard' object has no attribute 'leverage'
+WARNING:ccxt.base.exchange:binance requires to release all resources with an explicit call to the .close() coroutine. If you are using the exchange instance with async coroutines, add `await exchange.close()` to your code into a place when you're done with the exchange and don't need the exchange instance anymore (at the end of your async coroutine).
+WARNING:ccxt.base.exchange:binanceusdm requires to release all resources with an explicit call to the .close() coroutine. If you are using the exchange instance with async coroutines, add `await exchange.close()` to your code into a place when you're done with the exchange and don't need the exchange instance anymore (at the end of your async coroutine).
+WARNING:ccxt.base.exchange:binance requires to release all resources with an explicit call to the .close() coroutine. If you are using the exchange instance with async coroutines, add `await exchange.close()` to your code into a place when you're done with the exchange and don't need the exchange instance anymore (at the end of your async coroutine).
+WARNING:ccxt.base.exchange:bybit requires to release all resources with an explicit call to the .close() coroutine. If you are using the exchange instance with async coroutines, add `await exchange.close()` to your code into a place when you're done with the exchange and don't need the exchange instance anymore (at the end of your async coroutine).
+WARNING:ccxt.base.exchange:bybit requires to release all resources with an explicit call to the .close() coroutine. If you are using the exchange instance with async coroutines, add `await exchange.close()` to your code into a place when you're done with the exchange and don't need the exchange instance anymore (at the end of your async coroutine).
+WARNING:ccxt.base.exchange:bitget requires to release all resources with an explicit call to the .close() coroutine. If you are using the exchange instance with async coroutines, add `await exchange.close()` to your code into a place when you're done with the exchange and don't need the exchange instance anymore (at the end of your async coroutine).
+WARNING:ccxt.base.exchange:bitget requires to release all resources with an explicit call to the .close() coroutine. If you are using the exchange instance with async coroutines, add `await exchange.close()` to your code into a place when you're done with the exchange and don't need the exchange instance anymore (at the end of your async coroutine).
+WARNING:ccxt.base.exchange:gate requires to release all resources with an explicit call to the .close() coroutine. If you are using the exchange instance with async coroutines, add `await exchange.close()` to your code into a place when you're done with the exchange and don't need the exchange instance anymore (at the end of your async coroutine).
+WARNING:ccxt.base.exchange:gate requires to release all resources with an explicit call to the .close() coroutine. If you are using the exchange instance with async coroutines, add `await exchange.close()` to your code into a place when you're done with the exchange and don't need the exchange instance anymore (at the end of your async coroutine).
+ERROR:asyncio:Unclosed client session
+client_session: <aiohttp.client.ClientSession object at 0x000001EBC0FDA420>
+ERROR:asyncio:Unclosed client session
+client_session: <aiohttp.client.ClientSession object at 0x000001EBC0F78BF0>
+ERROR:asyncio:Unclosed client session
+client_session: <aiohttp.client.ClientSession object at 0x000001EBBDDFEA80>
+ERROR:asyncio:Unclosed client session
+client_session: <aiohttp.client.ClientSession object at 0x000001EBC0C986B0>
+ERROR:asyncio:Unclosed client session
+client_session: <aiohttp.client.ClientSession object at 0x000001EBC0A64890>
+ERROR:asyncio:Unclosed client session
+client_session: <aiohttp.client.ClientSession object at 0x000001EBC0C423C0>
+ERROR:asyncio:Unclosed client session
+client_session: <aiohttp.client.ClientSession object at 0x000001EBC15A6C60>
+ERROR:asyncio:Unclosed client session
+client_session: <aiohttp.client.ClientSession object at 0x000001EBBDDFCDA0>
+ERROR:asyncio:Unclosed client session
+client_session: <aiohttp.client.ClientSession object at 0x000001EBC13642C0>
+ERROR:asyncio:Unclosed connector
+connections: ['deque([(<aiohttp.client_proto.ResponseHandler object at 0x000001EBC15D0650>, 1386604.218)])']
+connector: <aiohttp.connector.TCPConnector object at 0x000001EBC0D475C0>
+ERROR:asyncio:Unclosed connector
+connections: ['deque([(<aiohttp.client_proto.ResponseHandler object at 0x000001EBC15D0770>, 1386602.937)])', 'deque([(<aiohttp.client_proto.ResponseHandler object at 0x000001EBC3CAE090>, 1386604.14)])']
+connector: <aiohttp.connector.TCPConnector object at 0x000001EBBDDFBDA0>
+ERROR:asyncio:Unclosed connector
+connections: ['deque([(<aiohttp.client_proto.ResponseHandler object at 0x000001EBC15D04D0>, 1386603.484)])', 'deque([(<aiohttp.client_proto.ResponseHandler object at 0x000001EBC1923410>, 1386603.64)])', 'deque([(<aiohttp.client_proto.ResponseHandler object at 0x000001EBC1923530>, 1386603.671)])', 'deque([(<aiohttp.client_proto.ResponseHandler object at 0x000001EBC7F622D0>, 1386604.921)])']
+connector: <aiohttp.connector.TCPConnector object at 0x000001EBBE4C43E0>
+ERROR:asyncio:Unclosed connector
+connections: ['deque([(<aiohttp.client_proto.ResponseHandler object at 0x000001EBC15D0890>, 1386604.687)])']
+connector: <aiohttp.connector.TCPConnector object at 0x000001EBBDADBBC0>
+ERROR:asyncio:Unclosed connector
+connections: ['deque([(<aiohttp.client_proto.ResponseHandler object at 0x000001EBC70E2690>, 1386604.828), (<aiohttp.client_proto.ResponseHandler object at 0x000001EBC70E2450>, 1386604.906), (<aiohttp.client_proto.ResponseHandler object at 0x000001EBC70E2570>, 1386605.359), (<aiohttp.client_proto.ResponseHandler object at 0x000001EBC70E27B0>, 1386605.437), (<aiohttp.client_proto.ResponseHandler object at 0x000001EBC15D09B0>, 1386609.125), (<aiohttp.client_proto.ResponseHandler object at 0x000001EBC70E2270>, 1386609.328)])']
+connector: <aiohttp.connector.TCPConnector object at 0x000001EBC08BD670>
+ERROR:asyncio:Unclosed connector
+connections: ['deque([(<aiohttp.client_proto.ResponseHandler object at 0x000001EBC15D0AD0>, 1386603.25), (<aiohttp.client_proto.ResponseHandler object at 0x000001EBC3CAE2D0>, 1386603.64), (<aiohttp.client_proto.ResponseHandler object at 0x000001EBC3CAE3F0>, 1386603.656), (<aiohttp.client_proto.ResponseHandler object at 0x000001EBC3CAE1B0>, 1386603.671)])']
+connector: <aiohttp.connector.TCPConnector object at 0x000001EBC09FE060>
+ERROR:asyncio:Unclosed connector
+connections: ['deque([(<aiohttp.client_proto.ResponseHandler object at 0x000001EBC15D0BF0>, 1386603.14), (<aiohttp.client_proto.ResponseHandler object at 0x000001EBC34F1730>, 1386603.64), (<aiohttp.client_proto.ResponseHandler object at 0x000001EBC34F15B0>, 1386603.64), (<aiohttp.client_proto.ResponseHandler object at 0x000001EBC34F1850>, 1386605.906)])']
+connector: <aiohttp.connector.TCPConnector object at 0x000001EBBDB4C170>
+ERROR:asyncio:Unclosed connector
+connections: ['deque([(<aiohttp.client_proto.ResponseHandler object at 0x000001EBC1923350>, 1386606.765), (<aiohttp.client_proto.ResponseHandler object at 0x000001EBC15D0D10>, 1386606.921), (<aiohttp.client_proto.ResponseHandler object at 0x000001EBC1F1FDD0>, 1386607.078)])']
+connector: <aiohttp.connector.TCPConnector object at 0x000001EBC15A7E60>
+ERROR:asyncio:Unclosed connector
+connections: ['deque([(<aiohttp.client_proto.ResponseHandler object at 0x000001EBD7C48AD0>, 1386608.281), (<aiohttp.client_proto.ResponseHandler object at 0x000001EBC15D0E30>, 1386608.421), (<aiohttp.client_proto.ResponseHandler object at 0x000001EBD7C48C50>, 1386609.031)])']
+connector: <aiohttp.connector.TCPConnector object at 0x000001EBBDDFCE30>

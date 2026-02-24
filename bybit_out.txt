@@ -1,0 +1,10 @@
+[2026-02-21T01:52:05.203Z] TYPE:LINEAR sell closed qty:0.1 filled:0.1 price:80.43 id:8b93be29-a69d-44cb-abba-dc0407d84de6
+[2026-02-21T01:52:05.417Z] TYPE:LINEAR sell closed qty:0.1 filled:0.1 price:80.43 id:4defb716-8950-44a4-8565-c427217450e4
+[2026-02-21T01:52:23.411Z] TYPE:LINEAR buy closed qty:0.1 filled:0.1 price:88.9 id:190676af-25db-4053-b0ca-e18f2e004bc7
+[2026-02-21T01:52:23.494Z] TYPE:LINEAR buy closed qty:0.1 filled:0.1 price:88.9 id:974e6170-4330-439c-a1ab-ad5a5b29ac5c
+[2026-02-21T01:52:23.589Z] TYPE:LINEAR buy closed qty:0.1 filled:0.1 price:88.9 id:3280857f-1b45-46bf-8bfe-543e6fc0ba2b
+[2026-02-21T00:54:29.965Z] TYPE:SPOT sell closed qty:0.1066 filled:0.1066 price:84.38 id:2155027271214525186
+[2026-02-21T00:54:29.965Z] TYPE:SPOT sell closed qty:0.1066 filled:0.1066 price:84.38 id:2155027271214525184
+[2026-02-21T00:54:29.967Z] TYPE:SPOT sell closed qty:0.1066 filled:0.1066 price:84.38 id:2155027271231302400
+[2026-02-21T00:54:30.389Z] TYPE:SPOT sell closed qty:0.1066 filled:0.1066 price:84.38 id:2155027274771294976
+[2026-02-21T00:54:46.834Z] TYPE:SPOT sell closed qty:0.0942 filled:0.0942 price:84.39 id:2155027412721953536

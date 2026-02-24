@@ -1,0 +1,8 @@
+fastapi
+uvicorn
+ccxt
+websockets
+pydantic
+aiohttp
+cryptography
+eth-account
