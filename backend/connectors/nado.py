@@ -289,8 +289,7 @@ class NadoClient:
         while True:
             try:
                 async with websockets.connect(
-                    self.WS_URL,
-                    extra_headers={"Sec-WebSocket-Extensions": "permessage-deflate"},
+                    self.WS_URL
                 ) as ws:
                     self._ws = ws
                     logging.info("Nado WS connected")
